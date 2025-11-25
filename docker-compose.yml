@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Development service
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - VITE_OPENAI_API_KEY=${VITE_OPENAI_API_KEY}
+      - VITE_GROK_API_KEY=${VITE_GROK_API_KEY}
+      - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
+      - VITE_ASSEMBLYAI_API_KEY=${VITE_ASSEMBLYAI_API_KEY}
+      - VITE_LLAMA_CLOUD_API_KEY=${VITE_LLAMA_CLOUD_API_KEY}
+      - VITE_EMBEDDING_MODEL=${VITE_EMBEDDING_MODEL}
+      - VITE_MONGODB_DATA_API_URL=${VITE_MONGODB_DATA_API_URL}
+      - VITE_MONGODB_DATA_API_KEY=${VITE_MONGODB_DATA_API_KEY}
+      - VITE_MONGODB_DATA_SOURCE=${VITE_MONGODB_DATA_SOURCE}
+      - VITE_MONGODB_VECTOR_DB=${VITE_MONGODB_VECTOR_DB}
+      - VITE_MONGODB_VECTOR_COLLECTION=${VITE_MONGODB_VECTOR_COLLECTION}
+      - VITE_MONGODB_VECTOR_INDEX=${VITE_MONGODB_VECTOR_INDEX}
+      - VITE_MONGODB_VECTOR_PATH=${VITE_MONGODB_VECTOR_PATH}
+    env_file:
+      - .env
+    profiles:
+      - dev
+
+  # Production service
+  app-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+      args:
+        - VITE_OPENAI_API_KEY=${VITE_OPENAI_API_KEY}
+        - VITE_GROK_API_KEY=${VITE_GROK_API_KEY}
+        - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
+        - VITE_ASSEMBLYAI_API_KEY=${VITE_ASSEMBLYAI_API_KEY}
+        - VITE_LLAMA_CLOUD_API_KEY=${VITE_LLAMA_CLOUD_API_KEY}
+        - VITE_EMBEDDING_MODEL=${VITE_EMBEDDING_MODEL}
+        - VITE_MONGODB_DATA_API_URL=${VITE_MONGODB_DATA_API_URL}
+        - VITE_MONGODB_DATA_API_KEY=${VITE_MONGODB_DATA_API_KEY}
+        - VITE_MONGODB_DATA_SOURCE=${VITE_MONGODB_DATA_SOURCE}
+        - VITE_MONGODB_VECTOR_DB=${VITE_MONGODB_VECTOR_DB}
+        - VITE_MONGODB_VECTOR_COLLECTION=${VITE_MONGODB_VECTOR_COLLECTION}
+        - VITE_MONGODB_VECTOR_INDEX=${VITE_MONGODB_VECTOR_INDEX}
+        - VITE_MONGODB_VECTOR_PATH=${VITE_MONGODB_VECTOR_PATH}
+    ports:
+      - "80:80"
+    env_file:
+      - .env
+    profiles:
+      - prod
+    restart: unless-stopped

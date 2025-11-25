@@ -3,7 +3,8 @@ import { AppView, LLMConfig, Note, ProcessingState } from './types';
 import Recorder from './components/Recorder';
 import NoteList from './components/NoteList';
 import NoteDetail from './components/NoteDetail';
-import { MicIcon, BrainIcon } from './components/Icons';
+import Settings from './components/Settings';
+import { MicIcon, BrainIcon, SettingsIcon } from './components/Icons';
 import {
   llmOptions,
   prepareAssistantNote,
@@ -20,6 +21,7 @@ const App: React.FC = () => {
   const [searchResults, setSearchResults] = useState<Note[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Mock Vector Search Filtering
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,6 +116,13 @@ const App: React.FC = () => {
             >
                 <BrainIcon className="w-5 h-5" />
                 <span className="font-medium">My Notes</span>
+            </button>
+            <button 
+                onClick={() => setShowSettings(true)}
+                className="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors hover:bg-plaud-gray/50 text-plaud-gray"
+            >
+                <SettingsIcon className="w-5 h-5" />
+                <span className="font-medium">Settings</span>
             </button>
         </nav>
 
@@ -230,6 +239,15 @@ const App: React.FC = () => {
         )}
 
       </main>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <Settings
+          llmConfig={llmConfig}
+          onConfigChange={setLlmConfig}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
     </div>
   );
 };
