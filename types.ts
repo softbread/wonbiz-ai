@@ -7,6 +7,8 @@ export interface Note {
   summary: string;
   tags: string[];
   audioBlob: Blob | null; // For playback
+  vectorScore?: number;
+  llmProvider?: string;
 }
 
 export interface ChatMessage {
@@ -25,4 +27,11 @@ export enum AppView {
 export interface ProcessingState {
   isProcessing: boolean;
   status: string; // e.g., "Transcribing...", "Vectorizing...", "Summarizing..."
+}
+
+export type LLMProvider = 'openai' | 'grok' | 'gemini';
+
+export interface LLMConfig {
+  provider: LLMProvider;
+  model: string;
 }

@@ -1,50 +1,90 @@
-import React, { useState } from 'react';
-import { AppView, Note, ProcessingState } from './types';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AppView, LLMConfig, Note, ProcessingState } from './types';
 import Recorder from './components/Recorder';
 import NoteList from './components/NoteList';
 import NoteDetail from './components/NoteDetail';
 import { MicIcon, BrainIcon } from './components/Icons';
-import { processAudioNote } from './services/geminiService';
+import {
+  llmOptions,
+  prepareAssistantNote,
+  upsertNoteToMongo,
+  vectorSearchNotes,
+} from './services/assistantService';
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>(AppView.DASHBOARD);
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeNote, setActiveNote] = useState<Note | null>(null);
   const [processingState, setProcessingState] = useState<ProcessingState>({ isProcessing: false, status: '' });
+  const [llmConfig, setLlmConfig] = useState<LLMConfig>({ provider: 'openai', model: llmOptions.openai.models[0] });
+  const [searchResults, setSearchResults] = useState<Note[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   // Mock Vector Search Filtering
   const [searchQuery, setSearchQuery] = useState('');
-  
-  const filteredNotes = notes.filter(n => 
-    n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    n.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    n.summary.toLowerCase().includes(searchQuery.toLowerCase())
+
+  const localFiltered = useMemo(
+    () =>
+      searchQuery
+        ? notes.filter(n =>
+            n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            n.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase())) ||
+            n.summary.toLowerCase().includes(searchQuery.toLowerCase()),
+          )
+        : notes,
+    [notes, searchQuery],
   );
+
+  const displayedNotes = useMemo(() => {
+    if (!searchQuery) return notes;
+    const merged = new Map<string, Note>();
+    [...searchResults, ...localFiltered].forEach(n => {
+      merged.set(n.id, n);
+    });
+    return Array.from(merged.values());
+  }, [searchQuery, searchResults, localFiltered, notes]);
+
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setIsSearching(false);
+      setSearchError(null);
+      return;
+    }
+
+    setIsSearching(true);
+    const timeout = setTimeout(async () => {
+      try {
+        const results = await vectorSearchNotes(searchQuery.trim());
+        setSearchResults(results);
+        setSearchError(null);
+      } catch (error) {
+        console.error(error);
+        setSearchError((error as Error).message);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
 
   const handleRecordingComplete = async (blob: Blob, duration: number) => {
     setView(AppView.DASHBOARD);
-    setProcessingState({ isProcessing: true, status: 'Uploading to Gemini...' });
+    setProcessingState({ isProcessing: true, status: 'Initializing voice pipeline...' });
 
     try {
-      // 1. Process with Gemini (Transcribe + Summary + Tags)
-      setProcessingState({ isProcessing: true, status: 'Analyzing audio with Gemini 2.5 Flash...' });
-      const analysis = await processAudioNote(blob);
+      const { note, embedding } = await prepareAssistantNote(blob, duration, llmConfig, status =>
+        setProcessingState({ isProcessing: true, status }),
+      );
 
-      // 2. Create Note Object (Simulating DB Save)
-      const newNote: Note = {
-        id: Date.now().toString(),
-        createdAt: Date.now(),
-        duration: duration,
-        audioBlob: blob,
-        title: analysis.title || "Untitled Recording",
-        transcript: analysis.transcript || "No transcript available.",
-        summary: analysis.summary || "No summary available.",
-        tags: analysis.tags || []
-      };
-
-      setNotes(prev => [newNote, ...prev]);
+      await upsertNoteToMongo(note, embedding);
+      setNotes(prev => [note, ...prev]);
     } catch (error) {
-      alert("Failed to process recording. Please check your API Key.");
+      console.error(error);
+      alert('Failed to process recording. Please verify your API keys and configuration.');
     } finally {
       setProcessingState({ isProcessing: false, status: '' });
     }
@@ -107,23 +147,58 @@ const App: React.FC = () => {
               <div className="px-6 py-8 md:py-10">
                  <h2 className="text-3xl font-light text-white mb-6">Good evening.</h2>
                  
-                 {/* Search / "Vector Search" Bar */}
-                 <div className="relative max-w-xl">
-                    <input 
-                        type="text" 
-                        placeholder="Search memories (Vector Search)..." 
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-plaud-dark border border-plaud-gray rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:border-plaud-accent focus:ring-1 focus:ring-plaud-accent transition-all"
-                    />
-                    <svg className="w-5 h-5 text-plaud-gray absolute left-4 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
+                 <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-8">
+                   {/* Search / "Vector Search" Bar */}
+                   <div className="relative max-w-xl flex-1">
+                      <input
+                          type="text"
+                          placeholder="Search memories (MongoDB Atlas Vector Search)..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full bg-plaud-dark border border-plaud-gray rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:border-plaud-accent focus:ring-1 focus:ring-plaud-accent transition-all"
+                      />
+                      <svg className="w-5 h-5 text-plaud-gray absolute left-4 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <div className="mt-2 text-xs text-plaud-gray flex items-center gap-2">
+                        {isSearching ? <span className="text-plaud-accent">Searching Atlas...</span> : <span>Vector results merge with local cache.</span>}
+                        {searchError && <span className="text-red-400">{searchError}</span>}
+                      </div>
+                   </div>
+
+                   <div className="flex flex-wrap gap-2 items-center bg-plaud-dark border border-plaud-gray rounded-xl px-3 py-2">
+                      <div className="flex flex-col">
+                        <label className="text-[10px] uppercase text-plaud-gray font-mono">LLM Provider</label>
+                        <select
+                          value={llmConfig.provider}
+                          onChange={e => setLlmConfig({ provider: e.target.value as LLMConfig['provider'], model: llmOptions[e.target.value].models[0] })}
+                          className="bg-plaud-black border border-plaud-gray rounded-lg px-3 py-2 text-sm"
+                        >
+                          {Object.entries(llmOptions).map(([key, value]) => (
+                            <option key={key} value={key}>{value.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <label className="text-[10px] uppercase text-plaud-gray font-mono">Model</label>
+                        <select
+                          value={llmConfig.model}
+                          onChange={e => setLlmConfig(prev => ({ ...prev, model: e.target.value }))}
+                          className="bg-plaud-black border border-plaud-gray rounded-lg px-3 py-2 text-sm"
+                        >
+                          {llmOptions[llmConfig.provider].models.map(model => (
+                            <option key={model} value={model}>{model}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="text-[11px] text-plaud-gray">AssemblyAI → LlamaIndex → {llmOptions[llmConfig.provider].label}</div>
+                   </div>
                  </div>
               </div>
 
               <div className="flex-1 overflow-y-auto pb-24">
-                 <NoteList notes={filteredNotes} onSelectNote={handleNoteSelect} />
+                 <NoteList notes={displayedNotes} onSelectNote={handleNoteSelect} />
               </div>
               
               {/* Floating Action Button */}
@@ -147,9 +222,10 @@ const App: React.FC = () => {
         )}
 
         {view === AppView.NOTE_DETAIL && activeNote && (
-            <NoteDetail 
-                note={activeNote} 
-                onBack={() => { setActiveNote(null); setView(AppView.DASHBOARD); }} 
+            <NoteDetail
+                note={activeNote}
+                llmConfig={llmConfig}
+                onBack={() => { setActiveNote(null); setView(AppView.DASHBOARD); }}
             />
         )}
 
