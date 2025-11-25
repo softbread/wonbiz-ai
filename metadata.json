@@ -1,0 +1,7 @@
+{
+  "name": "PlaudClone AI",
+  "description": "A voice-first AI note-taking assistant. Records audio, transcribes, summarizes, and allows chatting with your recordings using Gemini 2.5 Multimodal capabilities.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
