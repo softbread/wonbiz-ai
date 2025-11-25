@@ -15,6 +15,12 @@ View your app in AI Studio: https://ai.studio/apps/drive/1mrnV3navg1lEJQufxTcXaB
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Configure your environment in `.env.local` (or via AI Studio secrets):
+   - `VITE_ASSEMBLYAI_API_KEY` – AssemblyAI transcript key
+   - `VITE_LLAMA_CLOUD_API_KEY` – LlamaIndex Cloud API key
+   - `VITE_OPENAI_API_KEY` / `VITE_GROK_API_KEY` / `VITE_GEMINI_API_KEY` – LLM provider keys (choose which you need)
+   - `VITE_MONGODB_DATA_API_URL`, `VITE_MONGODB_DATA_API_KEY`, `VITE_MONGODB_DATA_SOURCE` – MongoDB Atlas Data API connection
+   - `VITE_MONGODB_VECTOR_DB`, `VITE_MONGODB_VECTOR_COLLECTION`, `VITE_MONGODB_VECTOR_INDEX` – vector search namespace
+   - Optional: `VITE_EMBEDDING_MODEL` to override the embedding model (defaults to `text-embedding-3-small`).
 3. Run the app:
    `npm run dev`

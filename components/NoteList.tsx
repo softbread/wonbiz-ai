@@ -41,14 +41,24 @@ const NoteList: React.FC<NoteListProps> = ({ notes, onSelectNote }) => {
           </p>
 
           <div className="flex items-center justify-between mt-auto">
-             <div className="flex gap-2">
+             <div className="flex gap-2 items-center">
+                {note.llmProvider && (
+                  <span className="text-[10px] uppercase tracking-wider px-2 py-1 bg-plaud-gray/30 rounded border border-plaud-gray text-plaud-text/80">
+                    {note.llmProvider}
+                  </span>
+                )}
                 {note.tags.slice(0, 2).map(tag => (
                   <span key={tag} className="text-[10px] uppercase tracking-wider px-2 py-1 bg-plaud-black rounded border border-plaud-gray text-plaud-text/80">
                     #{tag}
                   </span>
                 ))}
              </div>
-             <span className="text-xs font-mono text-plaud-gray">{formatDuration(note.duration)}</span>
+             <div className="text-right text-xs text-plaud-gray space-y-1">
+                {typeof note.vectorScore === 'number' && (
+                  <div className="font-mono">Score: {note.vectorScore.toFixed(3)}</div>
+                )}
+                <span className="font-mono">{formatDuration(note.duration || 0)}</span>
+             </div>
           </div>
         </div>
       ))}

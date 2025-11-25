@@ -105,7 +105,7 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel }) =>
     <div className="flex flex-col items-center justify-center h-full space-y-10 animate-fade-in">
       <div className="text-center space-y-2">
         <h2 className="text-2xl font-light text-plaud-text tracking-wide">Recording Voice Note</h2>
-        <p className="text-plaud-gray text-sm font-mono tracking-widest uppercase">Gemini Powered</p>
+        <p className="text-plaud-gray text-sm font-mono tracking-widest uppercase">AssemblyAI + LlamaIndex</p>
       </div>
 
       <div className="text-6xl font-thin font-mono tabular-nums text-white">

@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Note, ChatMessage } from '../types';
+import { Note, ChatMessage, LLMConfig } from '../types';
 import { ChevronLeftIcon, SendIcon, PlayIcon, PauseIcon } from './Icons';
-import { chatWithNote } from '../services/geminiService';
+import { chatAboutTranscript } from '../services/assistantService';
 import { formatDuration } from '../services/audioUtils';
 
 interface NoteDetailProps {
   note: Note;
+  llmConfig: LLMConfig;
   onBack: () => void;
 }
 
-const NoteDetail: React.FC<NoteDetailProps> = ({ note, onBack }) => {
+const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack }) => {
   const [activeTab, setActiveTab] = useState<'transcript' | 'summary' | 'chat'>('summary');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -18,6 +19,7 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, onBack }) => {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const hasAudio = !!note.audioBlob;
 
   useEffect(() => {
     if (note.audioBlob) {
@@ -34,6 +36,9 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, onBack }) => {
         audioRef.current?.pause();
         URL.revokeObjectURL(url);
       };
+    } else {
+      setIsPlaying(false);
+      setCurrentTime(0);
     }
   }, [note.audioBlob]);
 
@@ -44,7 +49,7 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, onBack }) => {
   }, [messages, activeTab]);
 
   const togglePlay = () => {
-    if (!audioRef.current) return;
+    if (!hasAudio || !audioRef.current) return;
     if (isPlaying) {
       audioRef.current.pause();
     } else {
@@ -68,14 +73,13 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, onBack }) => {
     setIsTyping(true);
 
     try {
-        // Prepare history for Gemini
         const history = messages.map(m => ({
-            role: m.role,
-            parts: [{ text: m.text }]
+            role: m.role === 'model' ? 'assistant' : 'user',
+            content: m.text
         }));
 
-        const responseText = await chatWithNote(history, userMsg.text, note.transcript);
-        
+        const responseText = await chatAboutTranscript(history, userMsg.text, note.transcript, llmConfig);
+
         const aiMsg: ChatMessage = {
             id: (Date.now() + 1).toString(),
             role: 'model',
@@ -111,16 +115,25 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, onBack }) => {
 
       {/* Audio Player Bar */}
       <div className="bg-plaud-dark border-b border-plaud-gray px-6 py-3 flex items-center gap-4">
-        <button onClick={togglePlay} className="w-10 h-10 flex items-center justify-center bg-plaud-accent rounded-full text-plaud-black hover:scale-105 transition-transform">
-          {isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5 pl-0.5" />}
-        </button>
-        <div className="flex-1 h-1 bg-plaud-gray rounded-full overflow-hidden">
-           <div 
-             className="h-full bg-plaud-text transition-all duration-100 ease-linear"
-             style={{ width: `${(currentTime / note.duration) * 100}%` }}
-           />
-        </div>
-        <span className="text-xs font-mono tabular-nums text-plaud-gray">{formatDuration(currentTime)} / {formatDuration(note.duration)}</span>
+        {hasAudio ? (
+          <>
+            <button onClick={togglePlay} className="w-10 h-10 flex items-center justify-center bg-plaud-accent rounded-full text-plaud-black hover:scale-105 transition-transform">
+              {isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5 pl-0.5" />}
+            </button>
+            <div className="flex-1 h-1 bg-plaud-gray rounded-full overflow-hidden">
+               <div
+                 className="h-full bg-plaud-text transition-all duration-100 ease-linear"
+                 style={{ width: `${note.duration ? (currentTime / note.duration) * 100 : 0}%` }}
+               />
+            </div>
+            <span className="text-xs font-mono tabular-nums text-plaud-gray">{formatDuration(currentTime)} / {formatDuration(note.duration)}</span>
+          </>
+        ) : (
+          <div className="flex items-center justify-between w-full text-plaud-gray text-sm">
+            <span>Playback unavailable (Atlas search result)</span>
+            <span className="font-mono text-xs">LLM: {note.llmProvider || llmConfig.provider}</span>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -149,6 +162,16 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, onBack }) => {
             <div className="prose prose-invert prose-p:text-plaud-text/90 prose-li:text-plaud-text/80 leading-relaxed">
                <p className="whitespace-pre-line">{note.summary}</p>
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div className="p-4 bg-plaud-dark rounded-xl border border-plaud-gray/40">
+                <p className="text-[10px] uppercase text-plaud-gray font-mono mb-1">LLM</p>
+                <p className="text-white">{note.llmProvider || llmConfig.provider} • {note.title}</p>
+              </div>
+              <div className="p-4 bg-plaud-dark rounded-xl border border-plaud-gray/40">
+                <p className="text-[10px] uppercase text-plaud-gray font-mono mb-1">Vector Score</p>
+                <p className="text-white">{typeof note.vectorScore === 'number' ? note.vectorScore.toFixed(3) : 'N/A'}</p>
+              </div>
+            </div>
             <div className="pt-8 border-t border-plaud-gray/30">
                 <h4 className="text-sm font-mono text-plaud-gray mb-3">KEY TOPICS (VECTOR EMBEDDINGS)</h4>
                 <div className="flex flex-wrap gap-2">
@@ -174,7 +197,7 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, onBack }) => {
                {messages.length === 0 && (
                    <div className="text-center text-plaud-gray mt-12">
                        <p>Ask questions about this recording.</p>
-                       <p className="text-xs mt-2 opacity-50">Powered by Gemini 1.5/2.5 Context Window</p>
+                       <p className="text-xs mt-2 opacity-50">Powered by LlamaIndex orchestration + {llmConfig.model}</p>
                    </div>
                )}
                {messages.map(msg => (
@@ -209,7 +232,7 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, onBack }) => {
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                        placeholder="Ask Gemini about this note..." 
+                        placeholder={`Ask ${llmConfig.model} about this note...`}
                         className="w-full bg-plaud-dark border border-plaud-gray rounded-full pl-6 pr-12 py-4 focus:outline-none focus:border-plaud-accent transition-colors"
                     />
                     <button 
