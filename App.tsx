@@ -18,7 +18,7 @@ const App: React.FC = () => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeNote, setActiveNote] = useState<Note | null>(null);
   const [processingState, setProcessingState] = useState<ProcessingState>({ isProcessing: false, status: '' });
-  const [llmConfig, setLlmConfig] = useState<LLMConfig>({ provider: 'gemini', model: 'gemini-2.5-flash' });
+  const [llmConfig, setLlmConfig] = useState<LLMConfig>({ provider: 'openai', model: 'gpt-4o-mini' });
   const [searchResults, setSearchResults] = useState<Note[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);

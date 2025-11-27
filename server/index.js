@@ -156,8 +156,17 @@ Return your response as a JSON object with keys: "transcript", "summary", "title
     }
 
     try {
-      // Try to parse as JSON
-      const parsed = JSON.parse(content);
+      // Try to parse as JSON - handle markdown-wrapped JSON
+      let jsonContent = content;
+      
+      // Extract JSON from markdown code blocks if present
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        jsonContent = jsonMatch[1].trim();
+      }
+      
+      const parsed = JSON.parse(jsonContent);
+      console.log('Successfully parsed LLM response:', parsed);
       return {
         transcript: parsed.transcript || transcript,
         summary: parsed.summary || 'Summary not available',
@@ -166,7 +175,8 @@ Return your response as a JSON object with keys: "transcript", "summary", "title
       };
     } catch (parseError) {
       // If JSON parsing fails, extract information from text response
-      console.warn('Failed to parse LlamaIndex response as JSON, using fallback parsing');
+      console.warn('Failed to parse LlamaIndex response as JSON:', parseError.message);
+      console.warn('Raw content:', content.substring(0, 500));
       return {
         transcript,
         summary: content.length > 100 ? content.substring(0, 200) + '...' : content,
@@ -277,8 +287,17 @@ Return your response as a JSON object with keys: "transcript", "summary", "title
   }
 
   try {
-    // Try to parse as JSON
-    const parsed = JSON.parse(content);
+    // Try to parse as JSON - handle markdown-wrapped JSON
+    let jsonContent = content;
+    
+    // Extract JSON from markdown code blocks if present
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      jsonContent = jsonMatch[1].trim();
+    }
+    
+    const parsed = JSON.parse(jsonContent);
+    console.log('Successfully parsed direct LLM response:', parsed);
     return {
       transcript: parsed.transcript || transcript,
       summary: parsed.summary || 'Summary not available',
@@ -287,7 +306,8 @@ Return your response as a JSON object with keys: "transcript", "summary", "title
     };
   } catch (parseError) {
     // If JSON parsing fails, use simple text extraction
-    console.warn(`Failed to parse ${llmConfig.provider} response as JSON, using fallback`);
+    console.warn(`Failed to parse ${llmConfig.provider} response as JSON:`, parseError.message);
+    console.warn('Raw content:', content.substring(0, 500));
 
     // Simple fallback: extract summary from the response
     const summary = content.length > 200 ? content.substring(0, 200) + '...' : content;

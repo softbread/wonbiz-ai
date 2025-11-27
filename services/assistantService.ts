@@ -8,6 +8,7 @@ const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 
 // Backend API URL - connects to our Express server
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+console.log('API_BASE_URL:', API_BASE_URL);
 
 const LLAMA_BASE_URL = 'https://api.llamaindex.ai/api/v1';
 
