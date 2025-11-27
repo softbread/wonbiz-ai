@@ -181,6 +181,17 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDele
             <div className="prose prose-invert prose-p:text-plaud-text/90 prose-li:text-plaud-text/80 leading-relaxed">
                <p className="whitespace-pre-line">{note.summary}</p>
             </div>
+            
+            {/* Full Transcript Section */}
+            <div className="pt-8 border-t border-plaud-gray/30">
+              <h4 className="text-lg font-medium text-plaud-accent mb-4">Full Transcript</h4>
+              <div className="bg-plaud-dark/50 rounded-xl p-6 border border-plaud-gray/20">
+                <div className="whitespace-pre-wrap leading-loose text-plaud-text/80 font-serif text-base">
+                  {note.transcript}
+                </div>
+              </div>
+            </div>
+            
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div className="p-4 bg-plaud-dark rounded-xl border border-plaud-gray/40">
                 <p className="text-[10px] uppercase text-plaud-gray font-mono mb-1">LLM</p>
@@ -188,7 +199,12 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDele
               </div>
               <div className="p-4 bg-plaud-dark rounded-xl border border-plaud-gray/40">
                 <p className="text-[10px] uppercase text-plaud-gray font-mono mb-1">Vector Score</p>
-                <p className="text-white">{typeof note.vectorScore === 'number' ? note.vectorScore.toFixed(3) : 'N/A'}</p>
+                <p className="text-white">
+                  {typeof note.vectorScore === 'number' 
+                    ? (note.vectorScore > 0.001 ? note.vectorScore.toFixed(3) : note.vectorScore.toExponential(2))
+                    : 'N/A'
+                  }
+                </p>
               </div>
             </div>
             <div className="pt-8 border-t border-plaud-gray/30">

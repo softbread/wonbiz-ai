@@ -55,7 +55,9 @@ const NoteList: React.FC<NoteListProps> = ({ notes, onSelectNote }) => {
              </div>
              <div className="text-right text-xs text-plaud-gray space-y-1">
                 {typeof note.vectorScore === 'number' && (
-                  <div className="font-mono">Score: {note.vectorScore.toFixed(3)}</div>
+                  <div className="font-mono">
+                    Score: {note.vectorScore > 0.001 ? note.vectorScore.toFixed(3) : note.vectorScore.toExponential(2)}
+                  </div>
                 )}
                 <span className="font-mono">{formatDuration(note.duration || 0)}</span>
              </div>
