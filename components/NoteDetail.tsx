@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Note, ChatMessage, LLMConfig } from '../types';
-import { ChevronLeftIcon, SendIcon, PlayIcon, PauseIcon } from './Icons';
-import { chatAboutTranscript } from '../services/assistantService';
+import { ChevronLeftIcon, SendIcon, PlayIcon, PauseIcon, TrashIcon } from './Icons';
+import { chatAboutTranscript, deleteNoteFromMongo } from '../services/assistantService';
 import { formatDuration } from '../services/audioUtils';
 
 interface NoteDetailProps {
   note: Note;
   llmConfig: LLMConfig;
   onBack: () => void;
+  onDelete?: () => void;
 }
 
-const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack }) => {
+const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDelete }) => {
   const [activeTab, setActiveTab] = useState<'transcript' | 'summary' | 'chat'>('summary');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -48,14 +49,29 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack }) => {
     }
   }, [messages, activeTab]);
 
+  const handleDelete = async () => {
+    if (window.confirm('Are you sure you want to delete this note?')) {
+      try {
+        await deleteNoteFromMongo(note.id);
+        onDelete?.(); // Reload notes after deletion
+        onBack(); // Go back to the list after deletion
+      } catch (error) {
+        console.error('Failed to delete note:', error);
+        alert('Failed to delete note. Please try again.');
+      }
+    }
+  };
+
   const togglePlay = () => {
-    if (!hasAudio || !audioRef.current) return;
+    if (!audioRef.current) return;
+
     if (isPlaying) {
       audioRef.current.pause();
+      setIsPlaying(false);
     } else {
       audioRef.current.play();
+      setIsPlaying(true);
     }
-    setIsPlaying(!isPlaying);
   };
 
   const handleSendMessage = async () => {
@@ -111,6 +127,9 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack }) => {
                <span key={tag} className="hidden sm:inline-block px-2 py-1 bg-plaud-gray/20 rounded text-xs text-plaud-text/60 border border-plaud-gray/20">#{tag}</span>
            ))}
         </div>
+        <button onClick={handleDelete} className="p-2 hover:bg-red-500/20 rounded-full transition-colors text-red-400 hover:text-red-300">
+          <TrashIcon className="w-5 h-5" />
+        </button>
       </div>
 
       {/* Audio Player Bar */}

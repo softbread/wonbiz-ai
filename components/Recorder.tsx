@@ -19,10 +19,16 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel }) =>
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const durationRef = useRef<number>(0);
 
   useEffect(() => {
     startRecording();
-    return () => stopResources();
+    return () => {
+      stopResources();
+      setDuration(0);
+      durationRef.current = 0;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -34,6 +40,7 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel }) =>
     }
     if (sourceRef.current) sourceRef.current.disconnect();
     if (audioContextRef.current) audioContextRef.current.close();
+    durationRef.current = 0;
   };
 
   const startRecording = async () => {
@@ -58,15 +65,20 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel }) =>
 
       mediaRecorderRef.current.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        onRecordingComplete(blob, duration);
+        const finalDuration = durationRef.current;
+        console.log('Recording stopped, final duration:', finalDuration);
+        onRecordingComplete(blob, finalDuration);
         stream.getTracks().forEach(track => track.stop());
       };
 
       mediaRecorderRef.current.start();
       setIsRecording(true);
       
+      startTimeRef.current = Date.now();
       timerRef.current = window.setInterval(() => {
-        setDuration(prev => prev + 1);
+        const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        durationRef.current = elapsed;
+        setDuration(elapsed);
       }, 1000);
 
       visualize();
@@ -95,6 +107,7 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel }) =>
   };
 
   const stopRecording = () => {
+    console.log('Stop recording clicked, current duration:', duration, 'ref duration:', durationRef.current);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       setIsRecording(false);

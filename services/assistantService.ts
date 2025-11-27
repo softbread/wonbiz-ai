@@ -5,14 +5,9 @@ const LLAMA_CLOUD_API_KEY = import.meta.env.VITE_LLAMA_CLOUD_API_KEY || '';
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
 const GROK_API_KEY = import.meta.env.VITE_GROK_API_KEY || '';
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
-const MONGODB_DATA_API_URL = import.meta.env.VITE_MONGODB_DATA_API_URL || '';
-const MONGODB_DATA_API_KEY = import.meta.env.VITE_MONGODB_DATA_API_KEY || '';
-const MONGODB_DATA_SOURCE = import.meta.env.VITE_MONGODB_DATA_SOURCE || '';
-const MONGODB_VECTOR_DB = import.meta.env.VITE_MONGODB_VECTOR_DB || '';
-const MONGODB_VECTOR_COLLECTION = import.meta.env.VITE_MONGODB_VECTOR_COLLECTION || '';
-const MONGODB_VECTOR_INDEX = import.meta.env.VITE_MONGODB_VECTOR_INDEX || '';
-const MONGODB_VECTOR_PATH = import.meta.env.VITE_MONGODB_VECTOR_PATH || 'embedding';
-const EMBEDDING_MODEL = import.meta.env.VITE_EMBEDDING_MODEL || 'text-embedding-3-small';
+
+// Backend API URL - connects to our Express server
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 const LLAMA_BASE_URL = 'https://api.llamaindex.ai/api/v1';
 
@@ -45,197 +40,206 @@ export const transcribeWithAssemblyAI = async (audioBlob: Blob, onStatus?: (s: s
   if (!ASSEMBLY_API_KEY) throw new Error('Missing AssemblyAI API key');
   onStatus?.('Uploading to AssemblyAI...');
 
-  const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
+  console.log('Making transcription API call to backend...');
+  // Convert blob to base64 properly (avoiding spread operator on large arrays)
+  const arrayBuffer = await audioBlob.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  let binaryString = '';
+  for (let i = 0; i < uint8Array.length; i++) {
+    binaryString += String.fromCharCode(uint8Array[i]);
+  }
+  const base64Audio = btoa(binaryString);
+
+  const response = await fetch(`${API_BASE_URL}/api/transcribe`, {
     method: 'POST',
     headers: {
-      authorization: ASSEMBLY_API_KEY,
-      'transfer-encoding': 'chunked',
+      'Content-Type': 'application/json',
     },
-    body: audioBlob,
+    body: JSON.stringify({ audioBlob: base64Audio }),
   });
 
-  if (!uploadResponse.ok) throw new Error('Upload to AssemblyAI failed');
-  const { upload_url } = await uploadResponse.json();
-
-  onStatus?.('Requesting transcription...');
-  const transcriptResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
-    method: 'POST',
-    headers: {
-      authorization: ASSEMBLY_API_KEY,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ audio_url: upload_url, auto_highlights: true }),
-  });
-
-  if (!transcriptResponse.ok) throw new Error('Transcript request failed');
-  const transcriptJob = await transcriptResponse.json();
-
-  const transcriptId = transcriptJob.id;
-  let status = transcriptJob.status;
-  let transcriptText = '';
-
-  while (status !== 'completed') {
-    await new Promise(res => setTimeout(res, 3000));
-    const polling = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
-      headers: { authorization: ASSEMBLY_API_KEY },
-    });
-    const data = await polling.json();
-    status = data.status;
-    transcriptText = data.text;
-    if (status === 'error') throw new Error(data.error || 'AssemblyAI transcription failed');
-    onStatus?.(`AssemblyAI: ${status}...`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Backend transcription failed:', response.status, errorText);
+    throw new Error(`Transcription failed: ${errorText}`);
   }
 
-  return transcriptText;
+  const data = await response.json();
+  return data.transcript;
 };
 
 export const runLlamaIndexOrchestration = async (transcript: string, llmConfig: LLMConfig) => {
   if (!LLAMA_CLOUD_API_KEY) throw new Error('Missing LlamaIndex (LlamaCloud) API key');
 
-  const response = await fetch(`${LLAMA_BASE_URL}/chat/completions`, {
+  console.log('Making orchestration API call to backend...');
+  const response = await fetch(`${API_BASE_URL}/api/orchestrate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${LLAMA_CLOUD_API_KEY}`,
-      ...(getLlmAuthorization(llmConfig.provider)
-        ? { 'X-Preferred-Provider-Authorization': getLlmAuthorization(llmConfig.provider)! }
-        : {}),
-      'X-Preferred-Provider': llmConfig.provider,
     },
-    body: JSON.stringify({
-      model: llmConfig.model,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are LlamaIndex orchestrating summarization for a voice assistant. Use the provided LLM provider to summarize, title, and tag transcripts. Return strict JSON.',
-        },
-        {
-          role: 'user',
-          content: `Transcript to analyze:\n${transcript}\nReturn JSON with keys transcript, summary, title, tags (string array).`,
-        },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2,
-    }),
+    body: JSON.stringify({ transcript, llmConfig }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`LlamaIndex orchestration failed: ${errorText}`);
+    console.error('Backend orchestration failed:', response.status, errorText);
+    throw new Error(`Orchestration failed: ${errorText}`);
   }
 
   const data = await response.json();
-  const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
-  return parsed as { transcript: string; summary: string; title: string; tags: string[] };
+  return data as { transcript: string; summary: string; title: string; tags: string[] };
 };
 
-export const embedTranscript = async (input: string) => {
-  if (!LLAMA_CLOUD_API_KEY) throw new Error('Missing LlamaIndex (LlamaCloud) API key');
-
-  const response = await fetch(`${LLAMA_BASE_URL}/embeddings`, {
+// Generate embeddings via backend API
+export const embedTranscript = async (input: string): Promise<number[]> => {
+  console.log('Making embedding API call to:', API_BASE_URL);
+  const response = await fetch(`${API_BASE_URL}/api/embed`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${LLAMA_CLOUD_API_KEY}`,
     },
-    body: JSON.stringify({ model: EMBEDDING_MODEL, input }),
+    body: JSON.stringify({ text: input }),
   });
 
-  if (!response.ok) throw new Error('Embedding generation failed');
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Embedding API failed:', response.status, errorText);
+    throw new Error(`Embedding generation failed: ${errorText}`);
+  }
+
   const data = await response.json();
-  return (data.data?.[0]?.embedding as number[]) || [];
+  return data.embedding || [];
 };
 
+// Upsert note via backend API
 export const upsertNoteToMongo = async (note: Note, embedding: number[]) => {
-  if (!MONGODB_DATA_API_URL || !MONGODB_DATA_API_KEY || !MONGODB_DATA_SOURCE) return;
-  if (!MONGODB_VECTOR_DB || !MONGODB_VECTOR_COLLECTION) return;
+  try {
+    // Convert audioBlob to base64 if it exists
+    let audioData = null;
+    let audioMimeType = null;
 
-  const payload = {
-    dataSource: MONGODB_DATA_SOURCE,
-    database: MONGODB_VECTOR_DB,
-    collection: MONGODB_VECTOR_COLLECTION,
-    document: {
-      _id: note.id,
-      title: note.title,
-      summary: note.summary,
-      transcript: note.transcript,
-      tags: note.tags,
-      createdAt: note.createdAt,
-      duration: note.duration,
-      embedding,
-      llmProvider: note.llmProvider,
-    },
-  };
+    if (note.audioBlob) {
+      const arrayBuffer = await note.audioBlob.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      let binaryString = '';
+      for (let i = 0; i < uint8Array.length; i++) {
+        binaryString += String.fromCharCode(uint8Array[i]);
+      }
+      audioData = btoa(binaryString);
+      audioMimeType = note.audioBlob.type || 'audio/webm';
+    }
 
-  await fetch(`${MONGODB_DATA_API_URL}/action/insertOne`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'api-key': MONGODB_DATA_API_KEY,
-    },
-    body: JSON.stringify(payload),
-  });
+    const noteToSend = {
+      ...note,
+      audioData,
+      audioMimeType,
+    };
+
+    const response = await fetch(`${API_BASE_URL}/api/notes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ note: noteToSend, embedding }),
+    });
+
+    if (!response.ok) {
+      console.warn('Failed to save note to MongoDB:', await response.text());
+    }
+  } catch (error) {
+    console.warn('MongoDB upsert error:', error);
+  }
 };
 
-export const vectorSearchNotes = async (query: string) => {
-  if (!MONGODB_DATA_API_URL || !MONGODB_DATA_API_KEY || !MONGODB_DATA_SOURCE) return [] as Note[];
-  if (!MONGODB_VECTOR_DB || !MONGODB_VECTOR_COLLECTION || !MONGODB_VECTOR_INDEX) return [] as Note[];
-
-  const queryVector = await embedTranscript(query);
-
-  const payload = {
-    dataSource: MONGODB_DATA_SOURCE,
-    database: MONGODB_VECTOR_DB,
-    collection: MONGODB_VECTOR_COLLECTION,
-    pipeline: [
-      {
-        $vectorSearch: {
-          index: MONGODB_VECTOR_INDEX,
-          path: MONGODB_VECTOR_PATH,
-          queryVector,
-          numCandidates: 200,
-          limit: 12,
-        },
+// Vector search via backend API
+export const vectorSearchNotes = async (query: string): Promise<Note[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/notes/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      {
-        $project: {
-          title: 1,
-          summary: 1,
-          transcript: 1,
-          tags: 1,
-          createdAt: 1,
-          duration: 1,
-          score: { $meta: 'vectorSearchScore' },
-          llmProvider: 1,
-        },
-      },
-    ],
-  };
+      body: JSON.stringify({ query }),
+    });
 
-  const response = await fetch(`${MONGODB_DATA_API_URL}/action/aggregate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'api-key': MONGODB_DATA_API_KEY,
-    },
-    body: JSON.stringify(payload),
-  });
+    if (!response.ok) {
+      console.warn('Vector search failed:', await response.text());
+      return [];
+    }
 
-  if (!response.ok) return [];
-  const data = await response.json();
-  return (data.documents || []).map((doc: any) => ({
-    id: doc._id || crypto.randomUUID(),
-    title: doc.title,
-    summary: doc.summary,
-    transcript: doc.transcript,
-    tags: doc.tags || [],
-    createdAt: doc.createdAt,
-    duration: doc.duration || 0,
-    audioBlob: null,
-    vectorScore: doc.score,
-    llmProvider: doc.llmProvider,
-  })) as Note[];
+    const data = await response.json();
+    const notes = data.notes || [];
+
+    // Reconstruct audioBlob from audioData for each note
+    return notes.map((note: any) => ({
+      ...note,
+      audioBlob: note.audioData
+        ? new Blob([Uint8Array.from(atob(note.audioData), c => c.charCodeAt(0))], {
+            type: note.audioMimeType || 'audio/webm'
+          })
+        : null,
+    }));
+  } catch (error) {
+    console.warn('Vector search error:', error);
+    return [];
+  }
+};
+
+// Get all notes from backend
+export const getAllNotesFromMongo = async (): Promise<Note[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/notes`);
+
+    if (!response.ok) {
+      console.warn('Failed to fetch notes:', await response.text());
+      return [];
+    }
+
+    const data = await response.json();
+    const notes = data.notes || [];
+
+    // Reconstruct audioBlob from audioData for each note
+    return notes.map((note: any) => ({
+      ...note,
+      audioBlob: note.audioData
+        ? new Blob([Uint8Array.from(atob(note.audioData), c => c.charCodeAt(0))], {
+            type: note.audioMimeType || 'audio/webm'
+          })
+        : null,
+    }));
+  } catch (error) {
+    console.warn('Fetch notes error:', error);
+    return [];
+  }
+};
+
+// Delete note via backend API
+export const deleteNoteFromMongo = async (noteId: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/notes/${noteId}`, {
+      method: 'DELETE',
+    });
+
+    return response.ok;
+  } catch (error) {
+    console.warn('Delete note error:', error);
+    return false;
+  }
+};
+
+// Check backend health
+export const checkBackendHealth = async (): Promise<{
+  status: string;
+  mongodb: string;
+  voyage: string;
+} | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/health`);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
 };
 
 export const chatAboutTranscript = async (history: { role: string; content: string }[], newMessage: string, transcript: string, llmConfig: LLMConfig) => {
@@ -282,13 +286,23 @@ export const prepareAssistantNote = async (
   llmConfig: LLMConfig,
   onStatus?: (s: string) => void,
 ): Promise<{ note: Note; embedding: number[] }> => {
+  console.log('Starting prepareAssistantNote with blob size:', audioBlob.size, 'duration:', duration);
+  
+  if (audioBlob.size === 0) {
+    throw new Error('Audio blob is empty');
+  }
+  
+  if (duration < 0.1) {
+    throw new Error(`Recording is too short (${duration.toFixed(1)}s). Please record for at least 1 second.`);
+  }
+  
   onStatus?.('Transcribing with AssemblyAI...');
   const transcript = await transcribeWithAssemblyAI(audioBlob, onStatus);
 
   onStatus?.('Running LlamaIndex orchestration...');
   const analysis = await runLlamaIndexOrchestration(transcript, llmConfig);
 
-  onStatus?.('Generating vector with LlamaIndex...');
+  onStatus?.('Generating vector embedding...');
   const embedding = await embedTranscript(transcript);
 
   const note: Note = {
@@ -316,7 +330,7 @@ export const llmOptions: Record<string, { label: string; models: string[] }> = {
     models: ['grok-4.1-fast', 'grok-4.1', 'grok-4.1-mini'],
   },
   gemini: {
-    label: 'Gemini 3',
-    models: ['gemini-3', 'gemini-3-flash', 'gemini-3-pro'],
+    label: 'Gemini 2.5',
+    models: ['gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
   },
 };

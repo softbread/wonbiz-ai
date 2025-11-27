@@ -6,7 +6,9 @@ export interface Note {
   transcript: string;
   summary: string;
   tags: string[];
-  audioBlob: Blob | null; // For playback
+  audioBlob: Blob | null; // For playback (reconstructed from audioData)
+  audioData?: string | null; // base64 encoded audio data from server
+  audioMimeType?: string | null; // MIME type of the audio
   vectorScore?: number;
   llmProvider?: string;
 }

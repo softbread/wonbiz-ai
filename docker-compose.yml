@@ -1,8 +1,20 @@
-version: '3.8'
-
 services:
-  # Development service
-  app-dev:
+  # Backend API server
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./server/.env
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  # Development frontend (default)
+  app:
     build:
       context: .
       dockerfile: Dockerfile
@@ -13,25 +25,20 @@ services:
       - .:/app
       - /app/node_modules
     environment:
+      - NODE_ENV=development
       - VITE_OPENAI_API_KEY=${VITE_OPENAI_API_KEY}
       - VITE_GROK_API_KEY=${VITE_GROK_API_KEY}
       - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
       - VITE_ASSEMBLYAI_API_KEY=${VITE_ASSEMBLYAI_API_KEY}
       - VITE_LLAMA_CLOUD_API_KEY=${VITE_LLAMA_CLOUD_API_KEY}
-      - VITE_EMBEDDING_MODEL=${VITE_EMBEDDING_MODEL}
-      - VITE_MONGODB_DATA_API_URL=${VITE_MONGODB_DATA_API_URL}
-      - VITE_MONGODB_DATA_API_KEY=${VITE_MONGODB_DATA_API_KEY}
-      - VITE_MONGODB_DATA_SOURCE=${VITE_MONGODB_DATA_SOURCE}
-      - VITE_MONGODB_VECTOR_DB=${VITE_MONGODB_VECTOR_DB}
-      - VITE_MONGODB_VECTOR_COLLECTION=${VITE_MONGODB_VECTOR_COLLECTION}
-      - VITE_MONGODB_VECTOR_INDEX=${VITE_MONGODB_VECTOR_INDEX}
-      - VITE_MONGODB_VECTOR_PATH=${VITE_MONGODB_VECTOR_PATH}
+      - VITE_EMBEDDING_MODEL=${VITE_EMBEDDING_MODEL:-voyage-context-3}
+      - VITE_API_BASE_URL=http://localhost:3001
     env_file:
       - .env
-    profiles:
-      - dev
+    depends_on:
+      - server
 
-  # Production service
+  # Production frontend
   app-prod:
     build:
       context: .
@@ -43,18 +50,16 @@ services:
         - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
         - VITE_ASSEMBLYAI_API_KEY=${VITE_ASSEMBLYAI_API_KEY}
         - VITE_LLAMA_CLOUD_API_KEY=${VITE_LLAMA_CLOUD_API_KEY}
-        - VITE_EMBEDDING_MODEL=${VITE_EMBEDDING_MODEL}
-        - VITE_MONGODB_DATA_API_URL=${VITE_MONGODB_DATA_API_URL}
-        - VITE_MONGODB_DATA_API_KEY=${VITE_MONGODB_DATA_API_KEY}
-        - VITE_MONGODB_DATA_SOURCE=${VITE_MONGODB_DATA_SOURCE}
-        - VITE_MONGODB_VECTOR_DB=${VITE_MONGODB_VECTOR_DB}
-        - VITE_MONGODB_VECTOR_COLLECTION=${VITE_MONGODB_VECTOR_COLLECTION}
-        - VITE_MONGODB_VECTOR_INDEX=${VITE_MONGODB_VECTOR_INDEX}
-        - VITE_MONGODB_VECTOR_PATH=${VITE_MONGODB_VECTOR_PATH}
+        - VITE_EMBEDDING_MODEL=${VITE_EMBEDDING_MODEL:-voyage-context-3}
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:3001}
     ports:
       - "80:80"
+    environment:
+      - NODE_ENV=production
     env_file:
       - .env
+    restart: unless-stopped
+    depends_on:
+      - server
     profiles:
       - prod
-    restart: unless-stopped

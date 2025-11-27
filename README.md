@@ -1,4 +1,4 @@
-# Wonbiz AI - Voice Assistant & Note Taking App
+# WonBiz AI - Voice Assistant & Note Taking App
 
 <div align="center">
   <img width="1200" height="475" alt="Wonbiz AI Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
@@ -68,6 +68,7 @@ Wonbiz AI is a sophisticated voice assistant application that combines speech re
 - **MongoDB Atlas** account (for vector search)
 - **AssemblyAI** account (for transcription)
 - **LlamaCloud** account (for orchestration)
+- **Voyage AI** account (for embeddings)
 
 ### Installation
 
@@ -77,12 +78,17 @@ Wonbiz AI is a sophisticated voice assistant application that combines speech re
    cd wonbiz-ai
    ```
 
-2. **Install dependencies**
+2. **Install frontend dependencies**
    ```bash
    npm install
    ```
 
-3. **Configure environment variables**
+3. **Install backend dependencies**
+   ```bash
+   cd server && npm install && cd ..
+   ```
+
+4. **Configure frontend environment**
    ```bash
    cp .env.example .env
    ```
@@ -98,21 +104,38 @@ Wonbiz AI is a sophisticated voice assistant application that combines speech re
    VITE_ASSEMBLYAI_API_KEY=your_assemblyai_key
    VITE_LLAMA_CLOUD_API_KEY=your_llama_cloud_key
 
-   # MongoDB Atlas Vector Search
-   VITE_MONGODB_DATA_API_URL=https://data.mongodb-api.com/app/YOUR_APP_ID/endpoint/data/v1
-   VITE_MONGODB_DATA_API_KEY=your_mongodb_key
-   VITE_MONGODB_DATA_SOURCE=your_cluster
-   VITE_MONGODB_VECTOR_DB=your_database
-   VITE_MONGODB_VECTOR_COLLECTION=your_collection
-   VITE_MONGODB_VECTOR_INDEX=your_vector_index
+   # Backend API URL
+   VITE_API_BASE_URL=http://localhost:3001
    ```
 
-4. **Start the development server**
+5. **Configure backend environment**
+   ```bash
+   cp server/.env.example server/.env
+   ```
+
+   Edit `server/.env`:
+   ```env
+   # MongoDB Atlas connection string
+   MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/?retryWrites=true&w=majority
+   MONGODB_DB=wonbiz
+   MONGODB_COLLECTION=notes
+   MONGODB_VECTOR_INDEX=vector_index
+   
+   # Voyage AI for embeddings
+   VOYAGE_API_KEY=your_voyage_api_key
+   ```
+
+6. **Start the backend server**
+   ```bash
+   cd server && npm run dev
+   ```
+
+7. **Start the frontend (in another terminal)**
    ```bash
    npm run dev
    ```
 
-5. **Open your browser**
+8. **Open your browser**
    ```
    http://localhost:3000
    ```
@@ -121,17 +144,20 @@ Wonbiz AI is a sophisticated voice assistant application that combines speech re
 
 ### Development Environment
 ```bash
-# Start development container with hot reload
-docker-compose --profile dev up --build
+# Start both frontend and backend
+docker-compose up --build
 ```
 
 ### Production Deployment
 ```bash
-# Build and run production container
+# Build and run production containers
 docker-compose --profile prod up --build -d
 ```
 
-Access the production app at `http://localhost:80`
+Access:
+- Development frontend: `http://localhost:3000`
+- Backend API: `http://localhost:3001`
+- Production frontend: `http://localhost:80`
 
 ## ⚙️ Configuration
 
@@ -147,6 +173,8 @@ Choose from three AI providers with multiple models:
 
 ### Environment Variables
 
+#### Frontend (.env)
+
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `VITE_OPENAI_API_KEY` | OpenAI API key | Optional* |
@@ -154,47 +182,52 @@ Choose from three AI providers with multiple models:
 | `VITE_GEMINI_API_KEY` | Gemini API key | Optional* |
 | `VITE_ASSEMBLYAI_API_KEY` | AssemblyAI transcription key | Yes |
 | `VITE_LLAMA_CLOUD_API_KEY` | LlamaIndex Cloud API key | Yes |
-| `VITE_MONGODB_DATA_API_URL` | MongoDB Atlas Data API URL | Yes |
-| `VITE_MONGODB_DATA_API_KEY` | MongoDB Atlas API key | Yes |
-| `VITE_MONGODB_DATA_SOURCE` | MongoDB cluster name | Yes |
-| `VITE_MONGODB_VECTOR_DB` | Vector database name | Yes |
-| `VITE_MONGODB_VECTOR_COLLECTION` | Vector collection name | Yes |
-| `VITE_MONGODB_VECTOR_INDEX` | Vector search index name | Yes |
-| `VITE_EMBEDDING_MODEL` | Embedding model (default: `text-embedding-3-small`) | No |
+| `VITE_API_BASE_URL` | Backend API URL (default: `http://localhost:3001`) | Yes |
+| `VITE_EMBEDDING_MODEL` | Embedding model (default: `voyage-context-3`) | No |
 
 *At least one LLM provider API key is required
+
+#### Backend (server/.env)
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `MONGODB_URI` | MongoDB Atlas connection string | Yes |
+| `MONGODB_DB` | Database name (default: `wonbiz`) | No |
+| `MONGODB_COLLECTION` | Collection name (default: `notes`) | No |
+| `MONGODB_VECTOR_INDEX` | Vector search index name | Yes |
+| `MONGODB_VECTOR_PATH` | Embedding field path (default: `embedding`) | No |
+| `VOYAGE_API_KEY` | Voyage AI API key for embeddings | Yes |
+| `PORT` | Server port (default: `3001`) | No |
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   React App     │    │   Vite Build    │    │   Nginx Server  │
+│   React App     │    │  Express Server │    │  MongoDB Atlas  │
+│   (Frontend)    │    │   (Backend)     │    │                 │
 │                 │    │                 │    │                 │
-│ • Voice Recorder│    │ • Environment   │    │ • Static Files  │
-│ • Settings UI   │    │ • API Keys      │    │ • SPA Routing   │
-│ • Note Display  │    │ • Optimization  │    │ • Compression   │
+│ • Voice Recorder│───▶│ • REST API      │───▶│ • Vector Search │
+│ • Settings UI   │    │ • Voyage AI     │    │ • Document Store│
+│ • Note Display  │◀───│ • MongoDB Driver│◀───│ • Embeddings    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                    ┌─────────────────┐
-                    │  AI Services    │
-                    │                 │
-                    │ • AssemblyAI    │
-                    │ • LlamaIndex    │
-                    │ • LLM Providers │
-                    │ • MongoDB Atlas │
-                    └─────────────────┘
+         │                       │
+         │              ┌────────┴────────┐
+         │              │  AI Services    │
+         └─────────────▶│                 │
+                        │ • AssemblyAI    │
+                        │ • LlamaIndex    │
+                        │ • LLM Providers │
+                        └─────────────────┘
 ```
 
 ### Data Flow
 
-1. **Recording** → Audio blob captured
+1. **Recording** → Audio blob captured in browser
 2. **Transcription** → AssemblyAI processes audio
-3. **Analysis** → LlamaIndex orchestrates summarization
-4. **Embedding** → Text converted to vectors
-5. **Storage** → Note saved to MongoDB Atlas
-6. **Search** → Vector search finds relevant notes
+3. **Analysis** → LlamaIndex orchestrates summarization via LLM
+4. **Embedding** → Backend generates vectors via Voyage AI
+5. **Storage** → Note saved to MongoDB Atlas via backend
+6. **Search** → Vector search through backend API
 
 ## 📱 Usage
 
@@ -236,10 +269,15 @@ wonbiz-ai/
 │   ├── NoteList.tsx    # Note grid display
 │   ├── Recorder.tsx    # Audio recording UI
 │   └── Settings.tsx    # Configuration modal
-├── services/           # API integrations
-│   ├── assistantService.ts  # Main orchestration
+├── services/           # Frontend API integrations
+│   ├── assistantService.ts  # Main orchestration & backend API
 │   ├── audioUtils.ts   # Audio processing
 │   └── geminiService.ts     # Gemini-specific logic
+├── server/             # Backend Express server
+│   ├── index.js        # API server with MongoDB
+│   ├── package.json    # Server dependencies
+│   ├── Dockerfile      # Server container
+│   └── .env.example    # Server environment template
 ├── types.ts           # TypeScript definitions
 ├── App.tsx           # Main application
 ├── main.tsx         # React entry point

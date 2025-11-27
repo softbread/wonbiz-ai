@@ -10,6 +10,7 @@ import {
   prepareAssistantNote,
   upsertNoteToMongo,
   vectorSearchNotes,
+  getAllNotesFromMongo,
 } from './services/assistantService';
 
 const App: React.FC = () => {
@@ -17,11 +18,23 @@ const App: React.FC = () => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeNote, setActiveNote] = useState<Note | null>(null);
   const [processingState, setProcessingState] = useState<ProcessingState>({ isProcessing: false, status: '' });
-  const [llmConfig, setLlmConfig] = useState<LLMConfig>({ provider: 'openai', model: llmOptions.openai.models[0] });
+  const [llmConfig, setLlmConfig] = useState<LLMConfig>({ provider: 'gemini', model: 'gemini-2.5-flash' });
   const [searchResults, setSearchResults] = useState<Note[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Get time-based greeting
+  const getTimeBasedGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) {
+      return 'Good morning.';
+    } else if (hour >= 12 && hour < 17) {
+      return 'Good afternoon.';
+    } else {
+      return 'Good evening.';
+    }
+  };
 
   // Mock Vector Search Filtering
   const [searchQuery, setSearchQuery] = useState('');
@@ -73,6 +86,30 @@ const App: React.FC = () => {
     return () => clearTimeout(timeout);
   }, [searchQuery]);
 
+  // Load notes from MongoDB on app initialization
+  useEffect(() => {
+    const loadNotes = async () => {
+      try {
+        const loadedNotes = await getAllNotesFromMongo();
+        setNotes(loadedNotes);
+      } catch (error) {
+        console.error('Failed to load notes from MongoDB:', error);
+        // Keep notes empty if loading fails
+      }
+    };
+
+    loadNotes();
+  }, []);
+
+  const reloadNotes = async () => {
+    try {
+      const loadedNotes = await getAllNotesFromMongo();
+      setNotes(loadedNotes);
+    } catch (error) {
+      console.error('Failed to reload notes from MongoDB:', error);
+    }
+  };
+
   const handleRecordingComplete = async (blob: Blob, duration: number) => {
     setView(AppView.DASHBOARD);
     setProcessingState({ isProcessing: true, status: 'Initializing voice pipeline...' });
@@ -86,7 +123,7 @@ const App: React.FC = () => {
       setNotes(prev => [note, ...prev]);
     } catch (error) {
       console.error(error);
-      alert('Failed to process recording. Please verify your API keys and configuration.');
+      alert(`Failed to process recording: ${error.message || 'Unknown error'}`);
     } finally {
       setProcessingState({ isProcessing: false, status: '' });
     }
@@ -106,7 +143,7 @@ const App: React.FC = () => {
             <div className="w-8 h-8 bg-plaud-accent rounded-lg flex items-center justify-center">
                 <span className="text-plaud-black font-bold text-lg">P</span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-white">PlaudClone</h1>
+            <h1 className="text-xl font-bold tracking-tight text-white">WonBiz AI</h1>
         </div>
         
         <nav className="space-y-2">
@@ -154,7 +191,7 @@ const App: React.FC = () => {
         {view === AppView.DASHBOARD && (
            <div className="flex flex-col h-full">
               <div className="px-6 py-8 md:py-10">
-                 <h2 className="text-3xl font-light text-white mb-6">Good evening.</h2>
+                 <h2 className="text-3xl font-light text-white mb-6">{getTimeBasedGreeting()}</h2>
                  
                  <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-8">
                    {/* Search / "Vector Search" Bar */}
@@ -173,35 +210,6 @@ const App: React.FC = () => {
                         {isSearching ? <span className="text-plaud-accent">Searching Atlas...</span> : <span>Vector results merge with local cache.</span>}
                         {searchError && <span className="text-red-400">{searchError}</span>}
                       </div>
-                   </div>
-
-                   <div className="flex flex-wrap gap-2 items-center bg-plaud-dark border border-plaud-gray rounded-xl px-3 py-2">
-                      <div className="flex flex-col">
-                        <label className="text-[10px] uppercase text-plaud-gray font-mono">LLM Provider</label>
-                        <select
-                          value={llmConfig.provider}
-                          onChange={e => setLlmConfig({ provider: e.target.value as LLMConfig['provider'], model: llmOptions[e.target.value].models[0] })}
-                          className="bg-plaud-black border border-plaud-gray rounded-lg px-3 py-2 text-sm"
-                        >
-                          {Object.entries(llmOptions).map(([key, value]) => (
-                            <option key={key} value={key}>{value.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="flex flex-col">
-                        <label className="text-[10px] uppercase text-plaud-gray font-mono">Model</label>
-                        <select
-                          value={llmConfig.model}
-                          onChange={e => setLlmConfig(prev => ({ ...prev, model: e.target.value }))}
-                          className="bg-plaud-black border border-plaud-gray rounded-lg px-3 py-2 text-sm"
-                        >
-                          {llmOptions[llmConfig.provider].models.map(model => (
-                            <option key={model} value={model}>{model}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="text-[11px] text-plaud-gray">AssemblyAI → LlamaIndex → {llmOptions[llmConfig.provider].label}</div>
                    </div>
                  </div>
               </div>
@@ -235,6 +243,7 @@ const App: React.FC = () => {
                 note={activeNote}
                 llmConfig={llmConfig}
                 onBack={() => { setActiveNote(null); setView(AppView.DASHBOARD); }}
+                onDelete={reloadNotes}
             />
         )}
 
