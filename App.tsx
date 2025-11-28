@@ -3,8 +3,9 @@ import { AppView, LLMConfig, Note, ProcessingState } from './types';
 import Recorder from './components/Recorder';
 import NoteList from './components/NoteList';
 import NoteDetail from './components/NoteDetail';
+import ChatPage from './components/ChatPage';
 import Settings from './components/Settings';
-import { MicIcon, BrainIcon, SettingsIcon } from './components/Icons';
+import { MicIcon, BrainIcon, SettingsIcon, ChatIcon } from './components/Icons';
 import {
   llmOptions,
   prepareAssistantNote,
@@ -155,6 +156,13 @@ const App: React.FC = () => {
                 <span className="font-medium">My Notes</span>
             </button>
             <button 
+                onClick={() => { setView(AppView.CHAT); setActiveNote(null); }}
+                className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors ${view === AppView.CHAT ? 'bg-plaud-gray text-white' : 'hover:bg-plaud-gray/50 text-plaud-gray'}`}
+            >
+                <ChatIcon className="w-5 h-5" />
+                <span className="font-medium">Chat with AI</span>
+            </button>
+            <button 
                 onClick={() => setShowSettings(true)}
                 className="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors hover:bg-plaud-gray/50 text-plaud-gray"
             >
@@ -236,6 +244,10 @@ const App: React.FC = () => {
                 onRecordingComplete={handleRecordingComplete} 
                 onCancel={() => setView(AppView.DASHBOARD)} 
             />
+        )}
+
+        {view === AppView.CHAT && (
+            <ChatPage llmConfig={llmConfig} />
         )}
 
         {view === AppView.NOTE_DETAIL && activeNote && (

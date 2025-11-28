@@ -1,9 +1,9 @@
-FROM node:20-alpine
+FROM node:18-alpine
 
 WORKDIR /app
 
-# Install wget for health check
-RUN apk add --no-cache wget
+# Install wget for health check and OpenSSL for MongoDB TLS
+RUN apk add --no-cache wget openssl
 
 # Copy package files
 COPY package*.json ./

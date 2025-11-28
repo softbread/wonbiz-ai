@@ -1,4 +1,4 @@
-import { LLMConfig, Note } from '../types';
+import { LLMConfig, Note, ChatSession, ChatMessage } from '../types';
 
 const ASSEMBLY_API_KEY = import.meta.env.VITE_ASSEMBLYAI_API_KEY || '';
 const LLAMA_CLOUD_API_KEY = import.meta.env.VITE_LLAMA_CLOUD_API_KEY || '';
@@ -281,6 +281,38 @@ export const chatAboutTranscript = async (history: { role: string; content: stri
   return data.choices?.[0]?.message?.content || '';
 };
 
+export const chatWithNotes = async (history: { role: string; content: string }[], newMessage: string, contextNotes: Note[], llmConfig: LLMConfig) => {
+  const contextText = contextNotes.map(n => `
+---
+Title: ${n.title}
+Date: ${new Date(n.createdAt).toLocaleDateString()}
+Summary: ${n.summary}
+Transcript: ${n.transcript}
+---
+`).join('\n');
+
+  const response = await fetch(`${API_BASE_URL}/api/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      context: contextText,
+      history,
+      message: newMessage,
+      llmConfig,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Chat failed: ${text}`);
+  }
+
+  const data = await response.json();
+  return data.response || '';
+};
+
 export const prepareAssistantNote = async (
   audioBlob: Blob,
   duration: number,
@@ -334,4 +366,83 @@ export const llmOptions: Record<string, { label: string; models: string[] }> = {
     label: 'Gemini 2.5',
     models: ['gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
   },
+};
+
+// ============ Chat Session API ============
+
+// Get all chat sessions
+export const getAllChatSessions = async (): Promise<ChatSession[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat-sessions`);
+    if (!response.ok) {
+      console.warn('Failed to fetch chat sessions:', await response.text());
+      return [];
+    }
+    const data = await response.json();
+    return data.sessions || [];
+  } catch (error) {
+    console.warn('Fetch chat sessions error:', error);
+    return [];
+  }
+};
+
+// Get a single chat session by ID
+export const getChatSession = async (sessionId: string): Promise<ChatSession | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat-sessions/${sessionId}`);
+    if (!response.ok) {
+      console.warn('Failed to fetch chat session:', await response.text());
+      return null;
+    }
+    const data = await response.json();
+    return data.session || null;
+  } catch (error) {
+    console.warn('Fetch chat session error:', error);
+    return null;
+  }
+};
+
+// Create or update a chat session
+export const saveChatSession = async (session: ChatSession): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat-sessions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ session }),
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('Save chat session error:', error);
+    return false;
+  }
+};
+
+// Delete a chat session
+export const deleteChatSession = async (sessionId: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat-sessions/${sessionId}`, {
+      method: 'DELETE',
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('Delete chat session error:', error);
+    return false;
+  }
+};
+
+// Get the most recent chat session
+export const getLatestChatSession = async (): Promise<ChatSession | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat-sessions/latest`);
+    if (!response.ok) {
+      return null;
+    }
+    const data = await response.json();
+    return data.session || null;
+  } catch (error) {
+    console.warn('Fetch latest chat session error:', error);
+    return null;
+  }
 };

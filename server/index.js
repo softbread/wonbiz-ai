@@ -12,6 +12,7 @@ const PORT = process.env.PORT || 3001;
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB || 'wonbiz';
 const MONGODB_COLLECTION = process.env.MONGODB_COLLECTION || 'notes';
+const MONGODB_CHAT_COLLECTION = 'chat_sessions';
 const MONGODB_VECTOR_INDEX = process.env.MONGODB_VECTOR_INDEX || 'vector_index';
 const MONGODB_VECTOR_PATH = process.env.MONGODB_VECTOR_PATH || 'embedding';
 
@@ -31,6 +32,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 let db;
 let notesCollection;
+let chatSessionsCollection;
 
 // Middleware
 app.use(cors());
@@ -48,6 +50,7 @@ async function connectToMongoDB() {
     await client.connect();
     db = client.db(MONGODB_DB);
     notesCollection = db.collection(MONGODB_COLLECTION);
+    chatSessionsCollection = db.collection(MONGODB_CHAT_COLLECTION);
     console.log('✅ Connected to MongoDB Atlas');
     return client;
   } catch (error) {
@@ -629,6 +632,260 @@ app.delete('/api/notes/:id', async (req, res) => {
     res.json({ success: true, deleted: result.deletedCount });
   } catch (error) {
     console.error('Delete error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Chat with context (RAG endpoint)
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { context, history, message, llmConfig } = req.body;
+    if (!message || !llmConfig) {
+      return res.status(400).json({ error: 'Message and LLM config are required' });
+    }
+
+    console.log('RAG Chat request - Provider:', llmConfig.provider, 'Model:', llmConfig.model);
+    console.log('Context length:', context?.length || 0, 'History length:', history?.length || 0);
+
+    const systemPrompt = `You are a helpful AI assistant with access to the user's notes. Answer questions based on the provided context from the notes. If the answer is not in the context, say so. Be concise and helpful.`;
+
+    let apiUrl, headers, body;
+
+    switch (llmConfig.provider) {
+      case 'openai':
+        if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
+        apiUrl = 'https://api.openai.com/v1/chat/completions';
+        headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        };
+        body = {
+          model: llmConfig.model || 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...(context ? [{ role: 'user', content: `Context from relevant notes:\n${context}` }] : []),
+            ...(history || []).map(h => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content })),
+            { role: 'user', content: message },
+          ],
+          temperature: 0.3,
+        };
+        break;
+
+      case 'grok':
+        if (!GROK_API_KEY) throw new Error('Grok API key not configured');
+        apiUrl = 'https://api.x.ai/v1/chat/completions';
+        headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${GROK_API_KEY}`,
+        };
+        body = {
+          model: llmConfig.model || 'grok-beta',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...(context ? [{ role: 'user', content: `Context from relevant notes:\n${context}` }] : []),
+            ...(history || []).map(h => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content })),
+            { role: 'user', content: message },
+          ],
+          temperature: 0.3,
+        };
+        break;
+
+      case 'gemini':
+        if (!GEMINI_API_KEY) throw new Error('Gemini API key not configured');
+        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${llmConfig.model || 'gemini-2.5-flash'}:generateContent?key=${GEMINI_API_KEY}`;
+        headers = {
+          'Content-Type': 'application/json',
+        };
+        
+        // Build conversation parts for Gemini
+        const parts = [];
+        parts.push({ text: systemPrompt });
+        if (context) {
+          parts.push({ text: `\n\nContext from relevant notes:\n${context}` });
+        }
+        if (history && history.length > 0) {
+          for (const h of history) {
+            parts.push({ text: `\n\n${h.role === 'assistant' ? 'Assistant' : 'User'}: ${h.content}` });
+          }
+        }
+        parts.push({ text: `\n\nUser: ${message}` });
+        
+        body = {
+          contents: [{
+            parts: parts,
+          }],
+          generationConfig: {
+            temperature: 0.3,
+          },
+        };
+        break;
+
+      default:
+        throw new Error(`Unsupported LLM provider: ${llmConfig.provider}`);
+    }
+
+    console.log('Making API call to:', apiUrl);
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('LLM API error:', response.status, errorText);
+      throw new Error(`LLM API error: ${errorText}`);
+    }
+
+    const data = await response.json();
+    let responseText;
+
+    if (llmConfig.provider === 'gemini') {
+      responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    } else {
+      responseText = data.choices?.[0]?.message?.content;
+    }
+
+    console.log('RAG Chat response received, length:', responseText?.length || 0);
+    res.json({ response: responseText || 'No response generated' });
+  } catch (error) {
+    console.error('Chat error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all chat sessions
+app.get('/api/chat-sessions', async (req, res) => {
+  try {
+    if (!chatSessionsCollection) {
+      return res.status(503).json({ error: 'MongoDB not connected' });
+    }
+
+    const sessions = await chatSessionsCollection
+      .find({})
+      .sort({ updatedAt: -1 })
+      .limit(50)
+      .toArray();
+
+    const formattedSessions = sessions.map((doc) => ({
+      id: doc._id,
+      title: doc.title,
+      messages: doc.messages || [],
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    }));
+
+    res.json({ sessions: formattedSessions });
+  } catch (error) {
+    console.error('Get chat sessions error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get latest chat session
+app.get('/api/chat-sessions/latest', async (req, res) => {
+  try {
+    if (!chatSessionsCollection) {
+      return res.status(503).json({ error: 'MongoDB not connected' });
+    }
+
+    const session = await chatSessionsCollection
+      .findOne({}, { sort: { updatedAt: -1 } });
+
+    if (!session) {
+      return res.json({ session: null });
+    }
+
+    res.json({
+      session: {
+        id: session._id,
+        title: session.title,
+        messages: session.messages || [],
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+      }
+    });
+  } catch (error) {
+    console.error('Get latest chat session error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get single chat session by ID
+app.get('/api/chat-sessions/:id', async (req, res) => {
+  try {
+    if (!chatSessionsCollection) {
+      return res.status(503).json({ error: 'MongoDB not connected' });
+    }
+
+    const { id } = req.params;
+    const session = await chatSessionsCollection.findOne({ _id: id });
+
+    if (!session) {
+      return res.status(404).json({ error: 'Chat session not found' });
+    }
+
+    res.json({
+      session: {
+        id: session._id,
+        title: session.title,
+        messages: session.messages || [],
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+      }
+    });
+  } catch (error) {
+    console.error('Get chat session error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create or update chat session
+app.post('/api/chat-sessions', async (req, res) => {
+  try {
+    if (!chatSessionsCollection) {
+      return res.status(503).json({ error: 'MongoDB not connected' });
+    }
+
+    const { session } = req.body;
+    if (!session || !session.id) {
+      return res.status(400).json({ error: 'Session with ID is required' });
+    }
+
+    const document = {
+      _id: session.id,
+      title: session.title || 'New Chat',
+      messages: session.messages || [],
+      createdAt: session.createdAt || Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const result = await chatSessionsCollection.replaceOne(
+      { _id: session.id },
+      document,
+      { upsert: true }
+    );
+
+    res.json({ success: true, result });
+  } catch (error) {
+    console.error('Save chat session error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete chat session
+app.delete('/api/chat-sessions/:id', async (req, res) => {
+  try {
+    if (!chatSessionsCollection) {
+      return res.status(503).json({ error: 'MongoDB not connected' });
+    }
+
+    const { id } = req.params;
+    const result = await chatSessionsCollection.deleteOne({ _id: id });
+
+    res.json({ success: true, deleted: result.deletedCount });
+  } catch (error) {
+    console.error('Delete chat session error:', error);
     res.status(500).json({ error: error.message });
   }
 });
