@@ -196,7 +196,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig, language = 'en' }) => {
   };
 
   return (
-    <div className="flex h-full bg-plaud-black animate-fade-in">
+    <div className="flex h-full bg-wonbiz-black animate-fade-in">
       {/* Sidebar Overlay (mobile) */}
       {sidebarOpen && (
         <div 
@@ -208,16 +208,16 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig, language = 'en' }) => {
       {/* Sidebar */}
       <div className={`
         fixed md:relative z-50 md:z-auto
-        w-72 h-full bg-plaud-dark border-r border-plaud-gray/30
+        w-72 h-full bg-wonbiz-dark border-r border-wonbiz-gray/30
         transform transition-transform duration-300 ease-in-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         flex flex-col
       `}>
         {/* Sidebar Header */}
-        <div className="p-4 border-b border-plaud-gray/30">
+        <div className="p-4 border-b border-wonbiz-gray/30">
           <button
             onClick={createNewSession}
-            className="w-full flex items-center justify-center gap-2 bg-plaud-accent text-plaud-black py-3 px-4 rounded-xl font-medium hover:opacity-90 transition-opacity"
+            className="w-full flex items-center justify-center gap-2 bg-wonbiz-accent text-wonbiz-black py-3 px-4 rounded-xl font-medium hover:opacity-90 transition-opacity"
           >
             <PlusIcon className="w-5 h-5" />
             <span>{t('newChat')}</span>
@@ -228,10 +228,10 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig, language = 'en' }) => {
         <div className="flex-1 overflow-y-auto p-3 space-y-1 scrollbar-hide">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="w-6 h-6 border-2 border-plaud-accent border-t-transparent rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-wonbiz-accent border-t-transparent rounded-full animate-spin" />
             </div>
           ) : sessions.length === 0 ? (
-            <div className="text-center text-plaud-gray py-8 text-sm">
+            <div className="text-center text-wonbiz-gray py-8 text-sm">
               {t('noChatHistory')}
             </div>
           ) : (
@@ -243,15 +243,15 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig, language = 'en' }) => {
                   group flex items-center justify-between p-3 rounded-lg cursor-pointer
                   transition-colors
                   ${currentSession?.id === session.id 
-                    ? 'bg-plaud-accent/20 border border-plaud-accent/50' 
-                    : 'hover:bg-plaud-gray/20 border border-transparent'}
+                    ? 'bg-wonbiz-accent/20 border border-wonbiz-accent/50' 
+                    : 'hover:bg-wonbiz-gray/20 border border-transparent'}
                 `}
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-white truncate font-medium">
                     {session.title}
                   </p>
-                  <p className="text-xs text-plaud-gray mt-0.5">
+                  <p className="text-xs text-wonbiz-gray mt-0.5">
                     {formatDate(session.updatedAt)} · {session.messages.length} {t('messages')}
                   </p>
                 </div>
@@ -270,12 +270,12 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig, language = 'en' }) => {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col relative">
         {/* Mobile Header */}
-        <div className="md:hidden flex items-center gap-3 p-4 border-b border-plaud-gray/30">
+        <div className="md:hidden flex items-center gap-3 p-4 border-b border-wonbiz-gray/30">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 hover:bg-plaud-gray/20 rounded-lg transition-colors"
+            className="p-2 hover:bg-wonbiz-gray/20 rounded-lg transition-colors"
           >
-            <MenuIcon className="w-5 h-5 text-plaud-gray" />
+            <MenuIcon className="w-5 h-5 text-wonbiz-gray" />
           </button>
           <h1 className="text-white font-medium truncate">
             {currentSession?.title || t('newChat')}
@@ -286,9 +286,9 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig, language = 'en' }) => {
         <div className="flex-1 overflow-y-auto p-6 pb-32 scrollbar-hide">
           <div className="max-w-3xl mx-auto space-y-6">
             {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-[60vh] text-plaud-gray text-center space-y-4">
-                <div className="w-16 h-16 bg-plaud-dark rounded-2xl flex items-center justify-center mb-4">
-                  <BrainIcon className="w-8 h-8 text-plaud-accent" />
+              <div className="flex flex-col items-center justify-center h-[60vh] text-wonbiz-gray text-center space-y-4">
+                <div className="w-16 h-16 bg-wonbiz-dark rounded-2xl flex items-center justify-center mb-4">
+                  <BrainIcon className="w-8 h-8 text-wonbiz-accent" />
                 </div>
                 <h2 className="text-2xl font-light text-white">{t('chatWithNotes')}</h2>
                 <p className="max-w-md">
@@ -302,8 +302,8 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig, language = 'en' }) => {
                 <div
                   className={`max-w-[85%] rounded-2xl px-5 py-4 shadow-sm ${
                     msg.role === 'user'
-                      ? 'bg-plaud-accent text-plaud-black rounded-tr-sm'
-                      : 'bg-plaud-dark border border-plaud-gray/50 text-plaud-text rounded-tl-sm'
+                      ? 'bg-wonbiz-accent text-wonbiz-black rounded-tr-sm'
+                      : 'bg-wonbiz-dark border border-wonbiz-gray/50 text-wonbiz-text rounded-tl-sm'
                   }`}
                 >
                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
@@ -313,7 +313,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig, language = 'en' }) => {
 
             {retrievingContext && (
                <div className="flex justify-start">
-                  <div className="bg-plaud-dark/50 border border-plaud-gray/30 px-4 py-2 rounded-full flex items-center gap-2 text-xs text-plaud-accent animate-pulse">
+                  <div className="bg-wonbiz-dark/50 border border-wonbiz-gray/30 px-4 py-2 rounded-full flex items-center gap-2 text-xs text-wonbiz-accent animate-pulse">
                      <BrainIcon className="w-3 h-3" />
                      <span>{t('searchingKnowledge')}</span>
                   </div>
@@ -322,11 +322,11 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig, language = 'en' }) => {
 
             {isTyping && !retrievingContext && (
               <div className="flex justify-start">
-                <div className="bg-plaud-dark border border-plaud-gray/50 px-4 py-3 rounded-2xl rounded-tl-sm">
+                <div className="bg-wonbiz-dark border border-wonbiz-gray/50 px-4 py-3 rounded-2xl rounded-tl-sm">
                   <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-plaud-gray rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-plaud-gray rounded-full animate-bounce delay-75"></div>
-                    <div className="w-2 h-2 bg-plaud-gray rounded-full animate-bounce delay-150"></div>
+                    <div className="w-2 h-2 bg-wonbiz-gray rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-wonbiz-gray rounded-full animate-bounce delay-75"></div>
+                    <div className="w-2 h-2 bg-wonbiz-gray rounded-full animate-bounce delay-150"></div>
                   </div>
                 </div>
               </div>
@@ -336,7 +336,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig, language = 'en' }) => {
         </div>
 
         {/* Input Area */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-plaud-black via-plaud-black to-transparent pt-10 pb-8 px-6">
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-wonbiz-black via-wonbiz-black to-transparent pt-10 pb-8 px-6">
           <div className="max-w-3xl mx-auto relative">
             <input
               type="text"
@@ -344,17 +344,17 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig, language = 'en' }) => {
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
               placeholder={t('askAboutNotes')}
-              className="w-full bg-plaud-dark border border-plaud-gray rounded-full pl-6 pr-14 py-4 focus:outline-none focus:border-plaud-accent focus:ring-1 focus:ring-plaud-accent transition-all shadow-lg text-white placeholder-plaud-gray"
+              className="w-full bg-wonbiz-dark border border-wonbiz-gray rounded-full pl-6 pr-14 py-4 focus:outline-none focus:border-wonbiz-accent focus:ring-1 focus:ring-wonbiz-accent transition-all shadow-lg text-white placeholder-wonbiz-gray"
             />
             <button
               onClick={handleSendMessage}
               disabled={!input.trim() || isTyping || retrievingContext}
-              className="absolute right-2 top-2 p-2 bg-plaud-accent rounded-full text-plaud-black hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-105"
+              className="absolute right-2 top-2 p-2 bg-wonbiz-accent rounded-full text-wonbiz-black hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-105"
             >
               <SendIcon className="w-5 h-5" />
             </button>
           </div>
-          <p className="text-center text-[10px] text-plaud-gray mt-3 font-mono">
+          <p className="text-center text-[10px] text-wonbiz-gray mt-3 font-mono">
             Powered by MongoDB Atlas Vector Search & {llmConfig.provider}
           </p>
         </div>

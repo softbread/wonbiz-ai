@@ -139,13 +139,13 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-full flex flex-col md:flex-row bg-plaud-black text-plaud-text overflow-hidden">
+    <div className="h-screen w-full flex flex-col md:flex-row bg-wonbiz-black text-wonbiz-text overflow-hidden">
       
       {/* Sidebar (Desktop) */}
-      <div className="hidden md:flex flex-col w-64 border-r border-plaud-gray p-6 bg-plaud-black z-20">
+      <div className="hidden md:flex flex-col w-64 border-r border-wonbiz-gray p-6 bg-wonbiz-black z-20">
         <div className="flex items-center gap-3 mb-10">
-            <div className="w-8 h-8 bg-plaud-accent rounded-lg flex items-center justify-center">
-                <span className="text-plaud-black font-bold text-lg">P</span>
+            <div className="w-8 h-8 bg-wonbiz-accent rounded-lg flex items-center justify-center">
+                <span className="text-wonbiz-black font-bold text-lg">W</span>
             </div>
             <h1 className="text-xl font-bold tracking-tight text-white">WonBiz AI</h1>
         </div>
@@ -153,21 +153,21 @@ const App: React.FC = () => {
         <nav className="space-y-2">
             <button 
                 onClick={() => { setView(AppView.DASHBOARD); setActiveNote(null); }}
-                className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors ${view === AppView.DASHBOARD ? 'bg-plaud-gray text-white' : 'hover:bg-plaud-gray/50 text-plaud-gray'}`}
+                className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors ${view === AppView.DASHBOARD ? 'bg-wonbiz-gray text-white' : 'hover:bg-wonbiz-gray/50 text-wonbiz-gray'}`}
             >
                 <BrainIcon className="w-5 h-5" />
                 <span className="font-medium">{t('myNotes')}</span>
             </button>
             <button 
                 onClick={() => { setView(AppView.CHAT); setActiveNote(null); }}
-                className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors ${view === AppView.CHAT ? 'bg-plaud-gray text-white' : 'hover:bg-plaud-gray/50 text-plaud-gray'}`}
+                className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors ${view === AppView.CHAT ? 'bg-wonbiz-gray text-white' : 'hover:bg-wonbiz-gray/50 text-wonbiz-gray'}`}
             >
                 <ChatIcon className="w-5 h-5" />
                 <span className="font-medium">{t('chatWithAI')}</span>
             </button>
             <button 
                 onClick={() => { setView(AppView.SETTINGS); setActiveNote(null); }}
-                className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors ${view === AppView.SETTINGS ? 'bg-plaud-gray text-white' : 'hover:bg-plaud-gray/50 text-plaud-gray'}`}
+                className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors ${view === AppView.SETTINGS ? 'bg-wonbiz-gray text-white' : 'hover:bg-wonbiz-gray/50 text-wonbiz-gray'}`}
             >
                 <SettingsIcon className="w-5 h-5" />
                 <span className="font-medium">{t('settings')}</span>
@@ -175,10 +175,10 @@ const App: React.FC = () => {
         </nav>
 
         <div className="mt-auto">
-             <div className="p-4 bg-plaud-dark rounded-xl border border-plaud-gray/50">
-                <p className="text-xs text-plaud-gray mb-2 font-mono">{t('storage')}</p>
-                <div className="w-full h-1.5 bg-plaud-black rounded-full overflow-hidden">
-                    <div className="h-full bg-plaud-accent w-[15%]"></div>
+             <div className="p-4 bg-wonbiz-dark rounded-xl border border-wonbiz-gray/50">
+                <p className="text-xs text-wonbiz-gray mb-2 font-mono">{t('storage')}</p>
+                <div className="w-full h-1.5 bg-wonbiz-black rounded-full overflow-hidden">
+                    <div className="h-full bg-wonbiz-accent w-[15%]"></div>
                 </div>
              </div>
         </div>
@@ -189,12 +189,12 @@ const App: React.FC = () => {
         
         {/* Processing Overlay */}
         {processingState.isProcessing && (
-          <div className="absolute inset-0 bg-plaud-black/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center space-y-6">
+          <div className="absolute inset-0 bg-wonbiz-black/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center space-y-6">
              <div className="relative">
-                <div className="w-16 h-16 border-4 border-plaud-gray rounded-full"></div>
-                <div className="w-16 h-16 border-4 border-t-plaud-accent border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+                <div className="w-16 h-16 border-4 border-wonbiz-gray rounded-full"></div>
+                <div className="w-16 h-16 border-4 border-t-wonbiz-accent border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin absolute top-0 left-0"></div>
              </div>
-             <p className="text-plaud-accent font-mono animate-pulse">{processingState.status}</p>
+             <p className="text-wonbiz-accent font-mono animate-pulse">{processingState.status}</p>
           </div>
         )}
 
@@ -212,13 +212,13 @@ const App: React.FC = () => {
                           placeholder={t('search')}
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
-                          className="w-full bg-plaud-dark border border-plaud-gray rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:border-plaud-accent focus:ring-1 focus:ring-plaud-accent transition-all"
+                          className="w-full bg-wonbiz-dark border border-wonbiz-gray rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:border-wonbiz-accent focus:ring-1 focus:ring-wonbiz-accent transition-all"
                       />
-                      <svg className="w-5 h-5 text-plaud-gray absolute left-4 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-5 h-5 text-wonbiz-gray absolute left-4 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                       </svg>
-                      <div className="mt-2 text-xs text-plaud-gray flex items-center gap-2">
-                        {isSearching ? <span className="text-plaud-accent">{t('searching')}</span> : <span>{t('searchHint')}</span>}
+                      <div className="mt-2 text-xs text-wonbiz-gray flex items-center gap-2">
+                        {isSearching ? <span className="text-wonbiz-accent">{t('searching')}</span> : <span>{t('searchHint')}</span>}
                         {searchError && <span className="text-red-400">{searchError}</span>}
                       </div>
                    </div>
@@ -233,10 +233,10 @@ const App: React.FC = () => {
               <div className="absolute bottom-8 right-8 md:bottom-12 md:right-12">
                   <button 
                     onClick={() => setView(AppView.RECORDING)}
-                    className="group flex items-center justify-center w-16 h-16 bg-plaud-accent rounded-full text-plaud-black shadow-lg hover:scale-110 transition-transform duration-200"
+                    className="group flex items-center justify-center w-16 h-16 bg-wonbiz-accent rounded-full text-wonbiz-black shadow-lg hover:scale-110 transition-transform duration-200"
                   >
                      <MicIcon className="w-8 h-8" />
-                     <span className="absolute right-full mr-4 bg-plaud-dark text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-plaud-gray">{t('newNote')}</span>
+                     <span className="absolute right-full mr-4 bg-wonbiz-dark text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-wonbiz-gray">{t('newNote')}</span>
                   </button>
               </div>
            </div>

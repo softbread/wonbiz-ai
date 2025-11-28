@@ -122,8 +122,8 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel, lang
   return (
     <div className="flex flex-col items-center justify-center h-full space-y-10 animate-fade-in">
       <div className="text-center space-y-2">
-        <h2 className="text-2xl font-light text-plaud-text tracking-wide">{t('recording')}</h2>
-        <p className="text-plaud-gray text-sm font-mono tracking-widest uppercase">AssemblyAI + LlamaIndex</p>
+        <h2 className="text-2xl font-light text-wonbiz-text tracking-wide">{t('recording')}</h2>
+        <p className="text-wonbiz-gray text-sm font-mono tracking-widest uppercase">AssemblyAI + LlamaIndex</p>
       </div>
 
       <div className="text-6xl font-thin font-mono tabular-nums text-white">
@@ -135,7 +135,7 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel, lang
         {audioLevel.map((level, i) => (
           <div 
             key={i} 
-            className="w-3 bg-plaud-accent rounded-full transition-all duration-75"
+            className="w-3 bg-wonbiz-accent rounded-full transition-all duration-75"
             style={{ height: `${Math.max(10, level)}%`, opacity: isRecording ? 1 : 0.5 }}
           />
         ))}
@@ -144,17 +144,17 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel, lang
       <div className="flex gap-6">
          <button 
           onClick={onCancel}
-          className="px-8 py-3 rounded-full text-plaud-text border border-plaud-gray hover:bg-plaud-gray transition-colors"
+          className="px-8 py-3 rounded-full text-wonbiz-text border border-wonbiz-gray hover:bg-wonbiz-gray transition-colors"
         >
           {t('cancel')}
         </button>
 
         <button 
           onClick={stopRecording}
-          className="group relative flex items-center justify-center w-20 h-20 bg-plaud-accent rounded-full hover:scale-105 transition-transform"
+          className="group relative flex items-center justify-center w-20 h-20 bg-wonbiz-accent rounded-full hover:scale-105 transition-transform"
         >
             <div className="absolute inset-0 rounded-full border border-white opacity-20 animate-ping"></div>
-            <StopIcon className="w-8 h-8 text-plaud-black" />
+            <StopIcon className="w-8 h-8 text-wonbiz-black" />
         </button>
       </div>
     </div>
