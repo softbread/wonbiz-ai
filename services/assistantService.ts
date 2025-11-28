@@ -12,6 +12,20 @@ console.log('API_BASE_URL:', API_BASE_URL);
 
 const LLAMA_BASE_URL = 'https://api.llamaindex.ai/api/v1';
 
+// Get auth token from localStorage
+const getAuthToken = (): string | null => {
+  return localStorage.getItem('wonbiz_auth_token');
+};
+
+// Get authenticated headers
+const getAuthHeaders = (): Record<string, string> => {
+  const token = getAuthToken();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+};
+
 const providerHeaderMap: Record<LLMConfig['provider'], string> = {
   openai: OPENAI_API_KEY,
   grok: GROK_API_KEY,
@@ -138,9 +152,7 @@ export const upsertNoteToMongo = async (note: Note, embedding: number[]) => {
 
     const response = await fetch(`${API_BASE_URL}/api/notes`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ note: noteToSend, embedding }),
     });
 
@@ -157,9 +169,7 @@ export const vectorSearchNotes = async (query: string): Promise<Note[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/notes/search`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ query }),
     });
 
@@ -189,7 +199,9 @@ export const vectorSearchNotes = async (query: string): Promise<Note[]> => {
 // Get all notes from backend
 export const getAllNotesFromMongo = async (): Promise<Note[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/notes`);
+    const response = await fetch(`${API_BASE_URL}/api/notes`, {
+      headers: getAuthHeaders(),
+    });
 
     if (!response.ok) {
       console.warn('Failed to fetch notes:', await response.text());
@@ -219,6 +231,7 @@ export const deleteNoteFromMongo = async (noteId: string): Promise<boolean> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/notes/${noteId}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
     });
 
     return response.ok;
@@ -295,6 +308,7 @@ Transcript: ${n.transcript}
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({
       context: contextText,
@@ -374,7 +388,9 @@ export const llmOptions: Record<string, { label: string; models: string[] }> = {
 // Get all chat sessions
 export const getAllChatSessions = async (): Promise<ChatSession[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/chat-sessions`);
+    const response = await fetch(`${API_BASE_URL}/api/chat-sessions`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) {
       console.warn('Failed to fetch chat sessions:', await response.text());
       return [];
@@ -390,7 +406,9 @@ export const getAllChatSessions = async (): Promise<ChatSession[]> => {
 // Get a single chat session by ID
 export const getChatSession = async (sessionId: string): Promise<ChatSession | null> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/chat-sessions/${sessionId}`);
+    const response = await fetch(`${API_BASE_URL}/api/chat-sessions/${sessionId}`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) {
       console.warn('Failed to fetch chat session:', await response.text());
       return null;
@@ -410,6 +428,7 @@ export const saveChatSession = async (session: ChatSession): Promise<boolean> =>
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({ session }),
     });
@@ -425,6 +444,7 @@ export const deleteChatSession = async (sessionId: string): Promise<boolean> => 
   try {
     const response = await fetch(`${API_BASE_URL}/api/chat-sessions/${sessionId}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
     });
     return response.ok;
   } catch (error) {
@@ -436,7 +456,9 @@ export const deleteChatSession = async (sessionId: string): Promise<boolean> => 
 // Get the most recent chat session
 export const getLatestChatSession = async (): Promise<ChatSession | null> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/chat-sessions/latest`);
+    const response = await fetch(`${API_BASE_URL}/api/chat-sessions/latest`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) {
       return null;
     }

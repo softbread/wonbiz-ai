@@ -13,6 +13,19 @@ export interface Note {
   llmProvider?: string;
 }
 
+// User types for authentication
+export interface User {
+  id: string;
+  username: string;
+  displayName: string;
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: User | null;
+  token: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'model';
@@ -115,6 +128,23 @@ export const i18n: Record<AppLanguage, Record<string, string>> = {
     chatError: 'Sorry, I encountered an error. Please try again.',
     noNotesYet: 'No notes yet',
     noNotesDescription: 'Tap the mic button below to create your first voice note.',
+    // Auth translations
+    login: 'Login',
+    register: 'Register',
+    username: 'Username',
+    password: 'Password',
+    displayName: 'Display Name',
+    loginTitle: 'Welcome Back',
+    registerTitle: 'Create Account',
+    loginSubtitle: 'Sign in to access your notes',
+    registerSubtitle: 'Get started with WonBiz AI',
+    noAccount: "Don't have an account?",
+    hasAccount: 'Already have an account?',
+    signUp: 'Sign up',
+    signIn: 'Sign in',
+    logout: 'Logout',
+    loggingIn: 'Signing in...',
+    registering: 'Creating account...',
   },
   zh: {
     appName: 'WonBiz AI',
@@ -174,5 +204,22 @@ export const i18n: Record<AppLanguage, Record<string, string>> = {
     chatError: '抱歉，遇到错误。请重试。',
     noNotesYet: '暂无笔记',
     noNotesDescription: '点击下方麦克风按钮创建您的第一条语音笔记。',
+    // Auth translations
+    login: '登录',
+    register: '注册',
+    username: '用户名',
+    password: '密码',
+    displayName: '显示名称',
+    loginTitle: '欢迎回来',
+    registerTitle: '创建账户',
+    loginSubtitle: '登录访问您的笔记',
+    registerSubtitle: '开始使用 WonBiz AI',
+    noAccount: '还没有账户？',
+    hasAccount: '已有账户？',
+    signUp: '注册',
+    signIn: '登录',
+    logout: '退出登录',
+    loggingIn: '登录中...',
+    registering: '创建账户中...',
   },
 };

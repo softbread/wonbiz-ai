@@ -2,17 +2,23 @@ import express from 'express';
 import cors from 'cors';
 import { MongoClient } from 'mongodb';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// JWT Secret (use environment variable in production)
+const JWT_SECRET = process.env.JWT_SECRET || 'wonbiz-ai-secret-key-change-in-production';
+
 // MongoDB configuration
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB || 'wonbiz';
 const MONGODB_COLLECTION = process.env.MONGODB_COLLECTION || 'notes';
 const MONGODB_CHAT_COLLECTION = 'chat_sessions';
+const MONGODB_USERS_COLLECTION = 'users';
 const MONGODB_VECTOR_INDEX = process.env.MONGODB_VECTOR_INDEX || 'vector_index';
 const MONGODB_VECTOR_PATH = process.env.MONGODB_VECTOR_PATH || 'embedding';
 
@@ -33,10 +39,29 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 let db;
 let notesCollection;
 let chatSessionsCollection;
+let usersCollection;
 
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// Authentication Middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(403).json({ error: 'Invalid or expired token' });
+  }
+};
 
 // Connect to MongoDB
 async function connectToMongoDB() {
@@ -51,6 +76,11 @@ async function connectToMongoDB() {
     db = client.db(MONGODB_DB);
     notesCollection = db.collection(MONGODB_COLLECTION);
     chatSessionsCollection = db.collection(MONGODB_CHAT_COLLECTION);
+    usersCollection = db.collection(MONGODB_USERS_COLLECTION);
+    
+    // Create unique index on username
+    await usersCollection.createIndex({ username: 1 }, { unique: true });
+    
     console.log('✅ Connected to MongoDB Atlas');
     return client;
   } catch (error) {
@@ -361,6 +391,146 @@ app.get('/health', (req, res) => {
   });
 });
 
+// ==================== AUTH ENDPOINTS ====================
+
+// Register new user
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    if (!usersCollection) {
+      return res.status(503).json({ error: 'MongoDB not connected' });
+    }
+
+    const { username, password, displayName } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    if (username.length < 3) {
+      return res.status(400).json({ error: 'Username must be at least 3 characters' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // Check if user already exists
+    const existingUser = await usersCollection.findOne({ username: username.toLowerCase() });
+    if (existingUser) {
+      return res.status(409).json({ error: 'Username already exists' });
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create user
+    const user = {
+      _id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      username: username.toLowerCase(),
+      displayName: displayName || username,
+      password: hashedPassword,
+      createdAt: Date.now(),
+    };
+
+    await usersCollection.insertOne(user);
+
+    // Generate token
+    const token = jwt.sign(
+      { userId: user._id, username: user.username },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      success: true,
+      user: {
+        id: user._id,
+        username: user.username,
+        displayName: user.displayName,
+      },
+      token,
+    });
+  } catch (error) {
+    console.error('Register error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Login user
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    if (!usersCollection) {
+      return res.status(503).json({ error: 'MongoDB not connected' });
+    }
+
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    // Find user
+    const user = await usersCollection.findOne({ username: username.toLowerCase() });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    // Generate token
+    const token = jwt.sign(
+      { userId: user._id, username: user.username },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        username: user.username,
+        displayName: user.displayName,
+      },
+      token,
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Verify token and get user info
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    if (!usersCollection) {
+      return res.status(503).json({ error: 'MongoDB not connected' });
+    }
+
+    const user = await usersCollection.findOne({ _id: req.user.userId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      user: {
+        id: user._id,
+        username: user.username,
+        displayName: user.displayName,
+      },
+    });
+  } catch (error) {
+    console.error('Auth check error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== END AUTH ENDPOINTS ====================
+
 // Transcribe audio with AssemblyAI
 app.post('/api/transcribe', async (req, res) => {
   try {
@@ -505,7 +675,7 @@ app.post('/api/embed', async (req, res) => {
 });
 
 // Upsert note with embedding
-app.post('/api/notes', async (req, res) => {
+app.post('/api/notes', authenticateToken, async (req, res) => {
   try {
     if (!notesCollection) {
       return res.status(503).json({ error: 'MongoDB not connected' });
@@ -518,6 +688,7 @@ app.post('/api/notes', async (req, res) => {
 
     const document = {
       _id: note.id,
+      userId: req.user.userId, // Add user ownership
       title: note.title,
       summary: note.summary,
       transcript: note.transcript,
@@ -532,7 +703,7 @@ app.post('/api/notes', async (req, res) => {
     };
 
     const result = await notesCollection.replaceOne(
-      { _id: note.id },
+      { _id: note.id, userId: req.user.userId },
       document,
       { upsert: true }
     );
@@ -544,8 +715,8 @@ app.post('/api/notes', async (req, res) => {
   }
 });
 
-// Vector search notes
-app.post('/api/notes/search', async (req, res) => {
+// Vector search notes (filtered by user)
+app.post('/api/notes/search', authenticateToken, async (req, res) => {
   try {
     if (!notesCollection) {
       return res.status(503).json({ error: 'MongoDB not connected' });
@@ -559,7 +730,7 @@ app.post('/api/notes/search', async (req, res) => {
     // Generate embedding for the query
     const queryVector = await generateEmbedding(query);
 
-    // Perform vector search
+    // Perform vector search with user filter
     const pipeline = [
       {
         $vectorSearch: {
@@ -567,8 +738,12 @@ app.post('/api/notes/search', async (req, res) => {
           path: MONGODB_VECTOR_PATH,
           queryVector,
           numCandidates: 200,
-          limit: 12,
+          limit: 50, // Get more candidates to filter
+          filter: { userId: req.user.userId }, // Filter by user
         },
+      },
+      {
+        $limit: 12, // Final limit after filter
       },
       {
         $project: {
@@ -608,18 +783,22 @@ app.post('/api/notes/search', async (req, res) => {
   }
 });
 
-// Get all notes
-app.get('/api/notes', async (req, res) => {
+// Get all notes (filtered by user)
+app.get('/api/notes', authenticateToken, async (req, res) => {
   try {
     if (!notesCollection) {
       return res.status(503).json({ error: 'MongoDB not connected' });
     }
 
+    console.log('GET /api/notes - userId:', req.user.userId);
+
     const notes = await notesCollection
-      .find({})
+      .find({ userId: req.user.userId })
       .sort({ createdAt: -1 })
       .limit(100)
       .toArray();
+
+    console.log('Found notes:', notes.length);
 
     const formattedNotes = notes.map((doc) => ({
       id: doc._id,
@@ -641,15 +820,19 @@ app.get('/api/notes', async (req, res) => {
   }
 });
 
-// Delete note
-app.delete('/api/notes/:id', async (req, res) => {
+// Delete note (verify ownership)
+app.delete('/api/notes/:id', authenticateToken, async (req, res) => {
   try {
     if (!notesCollection) {
       return res.status(503).json({ error: 'MongoDB not connected' });
     }
 
     const { id } = req.params;
-    const result = await notesCollection.deleteOne({ _id: id });
+    const result = await notesCollection.deleteOne({ _id: id, userId: req.user.userId });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Note not found or access denied' });
+    }
 
     res.json({ success: true, deleted: result.deletedCount });
   } catch (error) {
@@ -776,15 +959,15 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// Get all chat sessions
-app.get('/api/chat-sessions', async (req, res) => {
+// Get all chat sessions (filtered by user)
+app.get('/api/chat-sessions', authenticateToken, async (req, res) => {
   try {
     if (!chatSessionsCollection) {
       return res.status(503).json({ error: 'MongoDB not connected' });
     }
 
     const sessions = await chatSessionsCollection
-      .find({})
+      .find({ userId: req.user.userId })
       .sort({ updatedAt: -1 })
       .limit(50)
       .toArray();
@@ -804,15 +987,15 @@ app.get('/api/chat-sessions', async (req, res) => {
   }
 });
 
-// Get latest chat session
-app.get('/api/chat-sessions/latest', async (req, res) => {
+// Get latest chat session (filtered by user)
+app.get('/api/chat-sessions/latest', authenticateToken, async (req, res) => {
   try {
     if (!chatSessionsCollection) {
       return res.status(503).json({ error: 'MongoDB not connected' });
     }
 
     const session = await chatSessionsCollection
-      .findOne({}, { sort: { updatedAt: -1 } });
+      .findOne({ userId: req.user.userId }, { sort: { updatedAt: -1 } });
 
     if (!session) {
       return res.json({ session: null });
@@ -833,15 +1016,15 @@ app.get('/api/chat-sessions/latest', async (req, res) => {
   }
 });
 
-// Get single chat session by ID
-app.get('/api/chat-sessions/:id', async (req, res) => {
+// Get single chat session by ID (verify ownership)
+app.get('/api/chat-sessions/:id', authenticateToken, async (req, res) => {
   try {
     if (!chatSessionsCollection) {
       return res.status(503).json({ error: 'MongoDB not connected' });
     }
 
     const { id } = req.params;
-    const session = await chatSessionsCollection.findOne({ _id: id });
+    const session = await chatSessionsCollection.findOne({ _id: id, userId: req.user.userId });
 
     if (!session) {
       return res.status(404).json({ error: 'Chat session not found' });
@@ -862,8 +1045,8 @@ app.get('/api/chat-sessions/:id', async (req, res) => {
   }
 });
 
-// Create or update chat session
-app.post('/api/chat-sessions', async (req, res) => {
+// Create or update chat session (with user ownership)
+app.post('/api/chat-sessions', authenticateToken, async (req, res) => {
   try {
     if (!chatSessionsCollection) {
       return res.status(503).json({ error: 'MongoDB not connected' });
@@ -876,6 +1059,7 @@ app.post('/api/chat-sessions', async (req, res) => {
 
     const document = {
       _id: session.id,
+      userId: req.user.userId, // Add user ownership
       title: session.title || 'New Chat',
       messages: session.messages || [],
       createdAt: session.createdAt || Date.now(),
@@ -883,7 +1067,7 @@ app.post('/api/chat-sessions', async (req, res) => {
     };
 
     const result = await chatSessionsCollection.replaceOne(
-      { _id: session.id },
+      { _id: session.id, userId: req.user.userId },
       document,
       { upsert: true }
     );
@@ -895,15 +1079,19 @@ app.post('/api/chat-sessions', async (req, res) => {
   }
 });
 
-// Delete chat session
-app.delete('/api/chat-sessions/:id', async (req, res) => {
+// Delete chat session (verify ownership)
+app.delete('/api/chat-sessions/:id', authenticateToken, async (req, res) => {
   try {
     if (!chatSessionsCollection) {
       return res.status(503).json({ error: 'MongoDB not connected' });
     }
 
     const { id } = req.params;
-    const result = await chatSessionsCollection.deleteOne({ _id: id });
+    const result = await chatSessionsCollection.deleteOne({ _id: id, userId: req.user.userId });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Chat session not found or access denied' });
+    }
 
     res.json({ success: true, deleted: result.deletedCount });
   } catch (error) {

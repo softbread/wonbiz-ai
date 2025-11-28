@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AppView, LLMConfig, Note, ProcessingState, AppLanguage, i18n } from './types';
+import { AppView, LLMConfig, Note, ProcessingState, AppLanguage, i18n, User, AuthState } from './types';
 import Recorder from './components/Recorder';
 import NoteList from './components/NoteList';
 import NoteDetail from './components/NoteDetail';
 import ChatPage from './components/ChatPage';
 import Settings from './components/Settings';
-import { MicIcon, BrainIcon, SettingsIcon, ChatIcon } from './components/Icons';
+import Login from './components/Login';
+import { MicIcon, BrainIcon, SettingsIcon, ChatIcon, LogoutIcon } from './components/Icons';
 import {
   llmOptions,
   prepareAssistantNote,
@@ -13,6 +14,9 @@ import {
   vectorSearchNotes,
   getAllNotesFromMongo,
 } from './services/assistantService';
+
+const AUTH_TOKEN_KEY = 'wonbiz_auth_token';
+const AUTH_USER_KEY = 'wonbiz_auth_user';
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>(AppView.DASHBOARD);
@@ -24,9 +28,70 @@ const App: React.FC = () => {
   const [searchResults, setSearchResults] = useState<Note[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  
+  // Auth state
+  const [authState, setAuthState] = useState<AuthState>({
+    user: null,
+    token: null,
+    isAuthenticated: false,
+  });
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   // Get translated text
   const t = (key: string) => i18n[language][key] || key;
+
+  // Check for existing auth on app load
+  useEffect(() => {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    const userStr = localStorage.getItem(AUTH_USER_KEY);
+    
+    if (token && userStr) {
+      try {
+        const user = JSON.parse(userStr) as User;
+        // Verify token is still valid
+        fetch('http://localhost:3001/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+          .then(res => {
+            if (res.ok) {
+              setAuthState({ user, token, isAuthenticated: true });
+            } else {
+              // Token invalid, clear storage
+              localStorage.removeItem(AUTH_TOKEN_KEY);
+              localStorage.removeItem(AUTH_USER_KEY);
+            }
+          })
+          .catch(() => {
+            // Network error, still try to use cached auth
+            setAuthState({ user, token, isAuthenticated: true });
+          })
+          .finally(() => setIsAuthLoading(false));
+      } catch {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(AUTH_USER_KEY);
+        setIsAuthLoading(false);
+      }
+    } else {
+      setIsAuthLoading(false);
+    }
+  }, []);
+
+  // Handle login
+  const handleLogin = (user: User, token: string) => {
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    setAuthState({ user, token, isAuthenticated: true });
+  };
+
+  // Handle logout
+  const handleLogout = () => {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_USER_KEY);
+    setAuthState({ user: null, token: null, isAuthenticated: false });
+    setNotes([]);
+    setActiveNote(null);
+    setView(AppView.DASHBOARD);
+  };
 
   // Get time-based greeting
   const getTimeBasedGreeting = () => {
@@ -90,11 +155,16 @@ const App: React.FC = () => {
     return () => clearTimeout(timeout);
   }, [searchQuery]);
 
-  // Load notes from MongoDB on app initialization
+  // Load notes from MongoDB on app initialization (only when authenticated)
   useEffect(() => {
+    if (!authState.isAuthenticated || !authState.token) return;
+    
+    console.log('Loading notes for authenticated user...');
+    
     const loadNotes = async () => {
       try {
         const loadedNotes = await getAllNotesFromMongo();
+        console.log('Loaded notes:', loadedNotes.length);
         setNotes(loadedNotes);
       } catch (error) {
         console.error('Failed to load notes from MongoDB:', error);
@@ -103,7 +173,7 @@ const App: React.FC = () => {
     };
 
     loadNotes();
-  }, []);
+  }, [authState.isAuthenticated, authState.token]);
 
   const reloadNotes = async () => {
     try {
@@ -138,6 +208,23 @@ const App: React.FC = () => {
     setView(AppView.NOTE_DETAIL);
   };
 
+  // Show loading spinner while checking auth
+  if (isAuthLoading) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-wonbiz-black">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-wonbiz-gray rounded-full"></div>
+          <div className="w-16 h-16 border-4 border-t-wonbiz-accent border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login page if not authenticated
+  if (!authState.isAuthenticated) {
+    return <Login language={language} onLogin={handleLogin} onLanguageChange={setLanguage} />;
+  }
+
   return (
     <div className="h-screen w-full flex flex-col md:flex-row bg-wonbiz-black text-wonbiz-text overflow-hidden">
       
@@ -149,6 +236,14 @@ const App: React.FC = () => {
             </div>
             <h1 className="text-xl font-bold tracking-tight text-white">WonBiz AI</h1>
         </div>
+        
+        {/* User info */}
+        {authState.user && (
+          <div className="mb-6 pb-4 border-b border-wonbiz-gray/50">
+            <p className="text-sm text-white truncate">{authState.user.displayName}</p>
+            <p className="text-xs text-wonbiz-gray truncate">@{authState.user.username}</p>
+          </div>
+        )}
         
         <nav className="space-y-2">
             <button 
@@ -174,13 +269,22 @@ const App: React.FC = () => {
             </button>
         </nav>
 
-        <div className="mt-auto">
+        <div className="mt-auto space-y-4">
              <div className="p-4 bg-wonbiz-dark rounded-xl border border-wonbiz-gray/50">
                 <p className="text-xs text-wonbiz-gray mb-2 font-mono">{t('storage')}</p>
                 <div className="w-full h-1.5 bg-wonbiz-black rounded-full overflow-hidden">
                     <div className="h-full bg-wonbiz-accent w-[15%]"></div>
                 </div>
              </div>
+             
+             {/* Logout button */}
+             <button
+               onClick={handleLogout}
+               className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+             >
+               <LogoutIcon className="w-5 h-5" />
+               <span className="font-medium">{t('logout')}</span>
+             </button>
         </div>
       </div>
 
