@@ -101,14 +101,19 @@ function getLlmAuthorization(provider) {
 }
 
 // Orchestrate with LlamaIndex to generate summary, title, and tags
-async function orchestrateWithLlamaIndex(transcript, llmConfig) {
+async function orchestrateWithLlamaIndex(transcript, llmConfig, language = 'en') {
   if (!LLAMA_CLOUD_API_KEY) {
     console.log('LlamaCloud API key not configured, falling back to direct LLM call');
-    return await orchestrateWithDirectLLM(transcript, llmConfig);
+    return await orchestrateWithDirectLLM(transcript, llmConfig, language);
   }
 
   try {
-    const systemPrompt = `You are an AI assistant that processes voice transcripts. For the given transcript, provide:
+    const languageInstruction = language === 'zh' 
+      ? 'The transcript is in Chinese. Please respond entirely in Chinese (Simplified Chinese).'
+      : 'Please respond in English.';
+    
+    const systemPrompt = `You are an AI assistant that processes voice transcripts. ${languageInstruction}
+For the given transcript, provide:
 1. A cleaned-up version of the transcript (fix any transcription errors, improve readability)
 2. A concise summary (2-3 sentences)
 3. A descriptive title (5-10 words)
@@ -172,9 +177,9 @@ Return your response as a JSON object with keys: "transcript", "summary", "title
       console.log('Successfully parsed LLM response:', parsed);
       return {
         transcript: parsed.transcript || transcript,
-        summary: parsed.summary || 'Summary not available',
-        title: parsed.title || 'Untitled Recording',
-        tags: Array.isArray(parsed.tags) ? parsed.tags : ['voice', 'note'],
+        summary: parsed.summary || (language === 'zh' ? '摘要不可用' : 'Summary not available'),
+        title: parsed.title || (language === 'zh' ? '未命名录音' : 'Untitled Recording'),
+        tags: Array.isArray(parsed.tags) ? parsed.tags : (language === 'zh' ? ['语音', '笔记'] : ['voice', 'note']),
       };
     } catch (parseError) {
       // If JSON parsing fails, extract information from text response
@@ -183,22 +188,27 @@ Return your response as a JSON object with keys: "transcript", "summary", "title
       return {
         transcript,
         summary: content.length > 100 ? content.substring(0, 200) + '...' : content,
-        title: 'Voice Recording',
-        tags: ['voice', 'note'],
+        title: language === 'zh' ? '语音记录' : 'Voice Recording',
+        tags: language === 'zh' ? ['语音', '笔记'] : ['voice', 'note'],
       };
     }
   } catch (error) {
     console.error('LlamaIndex fetch error:', error.message);
     console.log('Falling back to direct LLM call due to network/API error');
-    return await orchestrateWithDirectLLM(transcript, llmConfig);
+    return await orchestrateWithDirectLLM(transcript, llmConfig, language);
   }
 }
 
 // Fallback orchestration using direct LLM API calls
-async function orchestrateWithDirectLLM(transcript, llmConfig) {
-  console.log(`Using direct ${llmConfig.provider} API for orchestration`);
+async function orchestrateWithDirectLLM(transcript, llmConfig, language = 'en') {
+  console.log(`Using direct ${llmConfig.provider} API for orchestration, language: ${language}`);
 
-  const systemPrompt = `You are an AI assistant that processes voice transcripts. For the given transcript, provide:
+  const languageInstruction = language === 'zh' 
+    ? 'The transcript is in Chinese. Please respond entirely in Chinese (Simplified Chinese).'
+    : 'Please respond in English.';
+
+  const systemPrompt = `You are an AI assistant that processes voice transcripts. ${languageInstruction}
+For the given transcript, provide:
 1. A cleaned-up version of the transcript (fix any transcription errors, improve readability)
 2. A concise summary (2-3 sentences)
 3. A descriptive title (5-10 words)
@@ -304,8 +314,8 @@ Return your response as a JSON object with keys: "transcript", "summary", "title
     return {
       transcript: parsed.transcript || transcript,
       summary: parsed.summary || 'Summary not available',
-      title: parsed.title || 'Untitled Recording',
-      tags: Array.isArray(parsed.tags) ? parsed.tags : ['voice', 'note'],
+      title: parsed.title || (language === 'zh' ? '未命名录音' : 'Untitled Recording'),
+      tags: Array.isArray(parsed.tags) ? parsed.tags : (language === 'zh' ? ['语音', '笔记'] : ['voice', 'note']),
     };
   } catch (parseError) {
     // If JSON parsing fails, use simple text extraction
@@ -314,13 +324,13 @@ Return your response as a JSON object with keys: "transcript", "summary", "title
 
     // Simple fallback: extract summary from the response
     const summary = content.length > 200 ? content.substring(0, 200) + '...' : content;
-    const title = transcript.length > 50 ? transcript.substring(0, 50) + '...' : 'Voice Recording';
+    const title = transcript.length > 50 ? transcript.substring(0, 50) + '...' : (language === 'zh' ? '语音记录' : 'Voice Recording');
 
     return {
       transcript,
       summary,
       title,
-      tags: ['voice', 'note'],
+      tags: language === 'zh' ? ['语音', '笔记'] : ['voice', 'note'],
     };
   }
 }
@@ -354,7 +364,7 @@ app.get('/health', (req, res) => {
 // Transcribe audio with AssemblyAI
 app.post('/api/transcribe', async (req, res) => {
   try {
-    const { audioBlob } = req.body;
+    const { audioBlob, language } = req.body;
     if (!audioBlob) {
       return res.status(400).json({ error: 'Audio blob is required' });
     }
@@ -362,7 +372,7 @@ app.post('/api/transcribe', async (req, res) => {
     // Decode base64 audio data
     const audioBuffer = Buffer.from(audioBlob, 'base64');
 
-    console.log('Starting AssemblyAI transcription for audio size:', audioBuffer.length);
+    console.log('Starting AssemblyAI transcription for audio size:', audioBuffer.length, 'language:', language || 'auto');
 
     // Step 1: Upload audio file to AssemblyAI
     const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
@@ -385,18 +395,30 @@ app.post('/api/transcribe', async (req, res) => {
     console.log('Audio uploaded successfully, URL:', audioUrl);
 
     // Step 2: Request transcription
+    // Build transcription config based on language setting
+    const transcriptionConfig = {
+      audio_url: audioUrl,
+      punctuate: true,
+      format_text: true,
+    };
+
+    // If language is specified as Chinese, use zh language code
+    // Otherwise use automatic language detection
+    if (language === 'zh') {
+      transcriptionConfig.language_code = 'zh';
+    } else if (language === 'en') {
+      transcriptionConfig.language_code = 'en';
+    } else {
+      transcriptionConfig.language_detection = true;
+    }
+
     const transcribeResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
       method: 'POST',
       headers: {
         'Authorization': ASSEMBLY_API_KEY,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        audio_url: audioUrl,
-        language_detection: true,
-        punctuate: true,
-        format_text: true,
-      }),
+      body: JSON.stringify(transcriptionConfig),
     });
 
     if (!transcribeResponse.ok) {
@@ -450,13 +472,13 @@ app.post('/api/transcribe', async (req, res) => {
 // Orchestrate with LlamaIndex
 app.post('/api/orchestrate', async (req, res) => {
   try {
-    const { transcript, llmConfig } = req.body;
+    const { transcript, llmConfig, language } = req.body;
     if (!transcript || !llmConfig) {
       return res.status(400).json({ error: 'Transcript and LLM config are required' });
     }
 
-    console.log('Starting LlamaIndex orchestration for transcript length:', transcript.length);
-    const result = await orchestrateWithLlamaIndex(transcript, llmConfig);
+    console.log('Starting LlamaIndex orchestration for transcript length:', transcript.length, 'language:', language || 'en');
+    const result = await orchestrateWithLlamaIndex(transcript, llmConfig, language || 'en');
     console.log('Orchestration completed successfully');
 
     res.json(result);

@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SendIcon, BrainIcon, PlusIcon, TrashIcon, MenuIcon } from './Icons';
 import { vectorSearchNotes, chatWithNotes, getAllChatSessions, saveChatSession, deleteChatSession, getLatestChatSession } from '../services/assistantService';
-import { ChatMessage, ChatSession, LLMConfig } from '../types';
+import { ChatMessage, ChatSession, LLMConfig, AppLanguage, i18n } from '../types';
 
 interface ChatPageProps {
   llmConfig: LLMConfig;
+  language?: AppLanguage;
 }
 
-const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
+const ChatPage: React.FC<ChatPageProps> = ({ llmConfig, language = 'en' }) => {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -17,6 +18,9 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Get translated text
+  const t = (key: string) => i18n[language][key] || key;
 
   // Load chat sessions on mount
   useEffect(() => {
@@ -83,7 +87,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
   const createNewSession = () => {
     const newSession: ChatSession = {
       id: Date.now().toString(),
-      title: 'New Chat',
+      title: t('newChat'),
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -122,7 +126,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
     if (!currentSession) {
       const newSession: ChatSession = {
         id: Date.now().toString(),
-        title: 'New Chat',
+        title: t('newChat'),
         messages: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -161,7 +165,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: responseText || "I couldn't generate a response.",
+        text: responseText || (language === 'zh' ? '我无法生成回复。' : "I couldn't generate a response."),
         timestamp: Date.now(),
       };
       setMessages(prev => [...prev, aiMsg]);
@@ -171,7 +175,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
       const errorMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: "Sorry, I encountered an error while processing your request.",
+        text: language === 'zh' ? '抱歉，处理您的请求时出现错误。' : "Sorry, I encountered an error while processing your request.",
         timestamp: Date.now(),
       };
       setMessages(prev => [...prev, errorMsg]);
@@ -185,10 +189,10 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
     
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return date.toLocaleDateString();
+    if (diffDays === 0) return t('today');
+    if (diffDays === 1) return t('yesterday');
+    if (diffDays < 7) return language === 'zh' ? `${diffDays}天前` : `${diffDays} days ago`;
+    return date.toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US');
   };
 
   return (
@@ -216,7 +220,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
             className="w-full flex items-center justify-center gap-2 bg-plaud-accent text-plaud-black py-3 px-4 rounded-xl font-medium hover:opacity-90 transition-opacity"
           >
             <PlusIcon className="w-5 h-5" />
-            <span>New Chat</span>
+            <span>{t('newChat')}</span>
           </button>
         </div>
 
@@ -228,7 +232,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
             </div>
           ) : sessions.length === 0 ? (
             <div className="text-center text-plaud-gray py-8 text-sm">
-              No chat history yet
+              {t('noChatHistory')}
             </div>
           ) : (
             sessions.map(session => (
@@ -248,7 +252,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
                     {session.title}
                   </p>
                   <p className="text-xs text-plaud-gray mt-0.5">
-                    {formatDate(session.updatedAt)} · {session.messages.length} messages
+                    {formatDate(session.updatedAt)} · {session.messages.length} {t('messages')}
                   </p>
                 </div>
                 <button
@@ -274,7 +278,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
             <MenuIcon className="w-5 h-5 text-plaud-gray" />
           </button>
           <h1 className="text-white font-medium truncate">
-            {currentSession?.title || 'New Chat'}
+            {currentSession?.title || t('newChat')}
           </h1>
         </div>
 
@@ -286,10 +290,9 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
                 <div className="w-16 h-16 bg-plaud-dark rounded-2xl flex items-center justify-center mb-4">
                   <BrainIcon className="w-8 h-8 text-plaud-accent" />
                 </div>
-                <h2 className="text-2xl font-light text-white">Chat with your Notes</h2>
+                <h2 className="text-2xl font-light text-white">{t('chatWithNotes')}</h2>
                 <p className="max-w-md">
-                  Ask questions about your recorded meetings, ideas, and voice notes. 
-                  I'll search your knowledge base to find the answer.
+                  {t('chatDescription')}
                 </p>
               </div>
             )}
@@ -312,7 +315,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
                <div className="flex justify-start">
                   <div className="bg-plaud-dark/50 border border-plaud-gray/30 px-4 py-2 rounded-full flex items-center gap-2 text-xs text-plaud-accent animate-pulse">
                      <BrainIcon className="w-3 h-3" />
-                     <span>Searching knowledge base...</span>
+                     <span>{t('searchingKnowledge')}</span>
                   </div>
                </div>
             )}
@@ -340,7 +343,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ llmConfig }) => {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-              placeholder={`Ask ${llmConfig.model} about your notes...`}
+              placeholder={t('askAboutNotes')}
               className="w-full bg-plaud-dark border border-plaud-gray rounded-full pl-6 pr-14 py-4 focus:outline-none focus:border-plaud-accent focus:ring-1 focus:ring-plaud-accent transition-all shadow-lg text-white placeholder-plaud-gray"
             />
             <button

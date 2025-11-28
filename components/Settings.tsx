@@ -1,16 +1,23 @@
 import React, { useState } from 'react';
-import { LLMConfig } from '../types';
+import { LLMConfig, AppLanguage, i18n } from '../types';
 import { llmOptions } from '../services/assistantService';
+import { ChevronLeftIcon } from './Icons';
 
 interface SettingsProps {
   llmConfig: LLMConfig;
   onConfigChange: (config: LLMConfig) => void;
-  onClose: () => void;
+  language: AppLanguage;
+  onLanguageChange: (language: AppLanguage) => void;
+  onBack: () => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ llmConfig, onConfigChange, onClose }) => {
+const Settings: React.FC<SettingsProps> = ({ llmConfig, onConfigChange, language, onLanguageChange, onBack }) => {
   const [localConfig, setLocalConfig] = useState<LLMConfig>(llmConfig);
+  const [localLanguage, setLocalLanguage] = useState<AppLanguage>(language);
   const [showApiKeys, setShowApiKeys] = useState(false);
+
+  // Get translated text
+  const t = (key: string) => i18n[localLanguage][key] || key;
 
   const handleProviderChange = (provider: LLMConfig['provider']) => {
     const newConfig = {
@@ -26,7 +33,8 @@ const Settings: React.FC<SettingsProps> = ({ llmConfig, onConfigChange, onClose 
 
   const handleSave = () => {
     onConfigChange(localConfig);
-    onClose();
+    onLanguageChange(localLanguage);
+    onBack();
   };
 
   const apiKeyStatus = {
@@ -38,26 +46,50 @@ const Settings: React.FC<SettingsProps> = ({ llmConfig, onConfigChange, onClose 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-plaud-dark border border-plaud-gray rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-plaud-gray">
-          <h2 className="text-xl font-semibold text-white">Settings</h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-plaud-gray rounded-lg transition-colors"
-          >
-            <svg className="w-5 h-5 text-plaud-gray" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+    <div className="h-full bg-plaud-black animate-fade-in flex flex-col">
+      {/* Header */}
+      <div className="flex items-center gap-3 p-4 border-b border-plaud-gray/30">
+        <button
+          onClick={onBack}
+          className="p-2 hover:bg-plaud-gray/20 rounded-lg transition-colors"
+        >
+          <ChevronLeftIcon className="w-5 h-5 text-plaud-gray" />
+        </button>
+        <h1 className="text-white font-medium">{t('settings')}</h1>
+      </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Language Selection */}
+          <div>
+            <h3 className="text-sm font-mono uppercase text-plaud-gray mb-3">{t('language')}</h3>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setLocalLanguage('en')}
+                className={`flex-1 p-3 rounded-xl border text-center transition-all ${
+                  localLanguage === 'en'
+                    ? 'border-plaud-accent bg-plaud-accent/10 text-plaud-accent'
+                    : 'border-plaud-gray hover:border-plaud-gray/80 hover:bg-plaud-gray/20 text-white'
+                }`}
+              >
+                {t('english')}
+              </button>
+              <button
+                onClick={() => setLocalLanguage('zh')}
+                className={`flex-1 p-3 rounded-xl border text-center transition-all ${
+                  localLanguage === 'zh'
+                    ? 'border-plaud-accent bg-plaud-accent/10 text-plaud-accent'
+                    : 'border-plaud-gray hover:border-plaud-gray/80 hover:bg-plaud-gray/20 text-white'
+                }`}
+              >
+                {t('chinese')}
+              </button>
+            </div>
+          </div>
+
           {/* LLM Provider Selection */}
           <div>
-            <h3 className="text-sm font-mono uppercase text-plaud-gray mb-3">LLM Provider</h3>
+            <h3 className="text-sm font-mono uppercase text-plaud-gray mb-3">{t('llmProvider')}</h3>
             <div className="space-y-2">
               {Object.entries(llmOptions).map(([key, value]) => (
                 <button
@@ -75,7 +107,7 @@ const Settings: React.FC<SettingsProps> = ({ llmConfig, onConfigChange, onClose 
                         {value.label}
                       </p>
                       <p className="text-xs text-plaud-gray mt-1">
-                        {value.models.length} model{value.models.length > 1 ? 's' : ''} available
+                        {value.models.length} {localLanguage === 'zh' ? '个模型可用' : `model${value.models.length > 1 ? 's' : ''} available`}
                       </p>
                     </div>
                     <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
@@ -93,7 +125,7 @@ const Settings: React.FC<SettingsProps> = ({ llmConfig, onConfigChange, onClose 
 
           {/* Model Selection */}
           <div>
-            <h3 className="text-sm font-mono uppercase text-plaud-gray mb-3">Model</h3>
+            <h3 className="text-sm font-mono uppercase text-plaud-gray mb-3">{t('model')}</h3>
             <select
               value={localConfig.model}
               onChange={(e) => handleModelChange(e.target.value)}
@@ -110,12 +142,12 @@ const Settings: React.FC<SettingsProps> = ({ llmConfig, onConfigChange, onClose 
           {/* API Key Status */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-mono uppercase text-plaud-gray">API Key Status</h3>
+              <h3 className="text-sm font-mono uppercase text-plaud-gray">{t('apiKeyStatus')}</h3>
               <button
                 onClick={() => setShowApiKeys(!showApiKeys)}
                 className="text-xs text-plaud-accent hover:underline"
               >
-                {showApiKeys ? 'Hide' : 'Show'}
+                {showApiKeys ? (localLanguage === 'zh' ? '隐藏' : 'Hide') : (localLanguage === 'zh' ? '显示' : 'Show')}
               </button>
             </div>
             
@@ -129,7 +161,9 @@ const Settings: React.FC<SettingsProps> = ({ llmConfig, onConfigChange, onClose 
                   <ApiKeyRow label="LlamaCloud" configured={apiKeyStatus.llamacloud} envVar="VITE_LLAMA_CLOUD_API_KEY" />
                 </div>
                 <p className="text-xs text-plaud-gray mt-3">
-                  API keys are configured via environment variables in your <code className="bg-plaud-gray/50 px-1 rounded">.env</code> file.
+                  {localLanguage === 'zh' 
+                    ? 'API 密钥通过 .env 文件中的环境变量配置。' 
+                    : <>API keys are configured via environment variables in your <code className="bg-plaud-gray/50 px-1 rounded">.env</code> file.</>}
                 </p>
               </div>
             )}
@@ -137,34 +171,31 @@ const Settings: React.FC<SettingsProps> = ({ llmConfig, onConfigChange, onClose 
 
           {/* Current Configuration Summary */}
           <div className="bg-plaud-black rounded-xl p-4 border border-plaud-gray">
-            <h3 className="text-sm font-mono uppercase text-plaud-gray mb-2">Current Configuration</h3>
+            <h3 className="text-sm font-mono uppercase text-plaud-gray mb-2">{t('currentConfig')}</h3>
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-white">Provider:</span>
+              <span className="text-white">{localLanguage === 'zh' ? '提供商:' : 'Provider:'}</span>
               <span className="text-plaud-accent">{llmOptions[localConfig.provider].label}</span>
             </div>
             <div className="flex items-center gap-2 text-sm mt-1">
-              <span className="text-white">Model:</span>
+              <span className="text-white">{localLanguage === 'zh' ? '模型:' : 'Model:'}</span>
               <span className="text-plaud-accent font-mono">{localConfig.model}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm mt-1">
+              <span className="text-white">{localLanguage === 'zh' ? '语言:' : 'Language:'}</span>
+              <span className="text-plaud-accent">{localLanguage === 'zh' ? '中文' : 'English'}</span>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-plaud-gray">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-plaud-gray text-white hover:bg-plaud-gray/30 transition-colors"
-          >
-            Cancel
-          </button>
+        <div className="flex items-center justify-end p-6 border-t border-plaud-gray/30">
           <button
             onClick={handleSave}
-            className="px-4 py-2 rounded-lg bg-plaud-accent text-plaud-black font-medium hover:bg-plaud-accent/90 transition-colors"
+            className="px-6 py-3 rounded-lg bg-plaud-accent text-plaud-black font-medium hover:bg-plaud-accent/90 transition-colors"
           >
-            Save Changes
+            {t('save')}
           </button>
         </div>
-      </div>
     </div>
   );
 };

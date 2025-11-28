@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Note, ChatMessage, LLMConfig } from '../types';
+import { Note, ChatMessage, LLMConfig, AppLanguage, i18n } from '../types';
 import { ChevronLeftIcon, SendIcon, PlayIcon, PauseIcon, TrashIcon } from './Icons';
 import { chatAboutTranscript, deleteNoteFromMongo } from '../services/assistantService';
 import { formatDuration } from '../services/audioUtils';
@@ -9,9 +9,10 @@ interface NoteDetailProps {
   llmConfig: LLMConfig;
   onBack: () => void;
   onDelete?: () => void;
+  language?: AppLanguage;
 }
 
-const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDelete }) => {
+const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDelete, language = 'en' }) => {
   const [activeTab, setActiveTab] = useState<'transcript' | 'summary' | 'chat'>('summary');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -21,6 +22,9 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDele
   const [isTyping, setIsTyping] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const hasAudio = !!note.audioBlob;
+
+  // Get translated text
+  const t = (key: string) => i18n[language][key] || key;
 
   useEffect(() => {
     if (note.audioBlob) {
@@ -50,14 +54,14 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDele
   }, [messages, activeTab]);
 
   const handleDelete = async () => {
-    if (window.confirm('Are you sure you want to delete this note?')) {
+    if (window.confirm(t('deleteNoteConfirm'))) {
       try {
         await deleteNoteFromMongo(note.id);
         onDelete?.(); // Reload notes after deletion
         onBack(); // Go back to the list after deletion
       } catch (error) {
         console.error('Failed to delete note:', error);
-        alert('Failed to delete note. Please try again.');
+        alert(language === 'zh' ? '删除笔记失败，请重试。' : 'Failed to delete note. Please try again.');
       }
     }
   };

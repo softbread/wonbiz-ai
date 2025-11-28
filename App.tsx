@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AppView, LLMConfig, Note, ProcessingState } from './types';
+import { AppView, LLMConfig, Note, ProcessingState, AppLanguage, i18n } from './types';
 import Recorder from './components/Recorder';
 import NoteList from './components/NoteList';
 import NoteDetail from './components/NoteDetail';
@@ -20,20 +20,23 @@ const App: React.FC = () => {
   const [activeNote, setActiveNote] = useState<Note | null>(null);
   const [processingState, setProcessingState] = useState<ProcessingState>({ isProcessing: false, status: '' });
   const [llmConfig, setLlmConfig] = useState<LLMConfig>({ provider: 'openai', model: 'gpt-4o-mini' });
+  const [language, setLanguage] = useState<AppLanguage>('en');
   const [searchResults, setSearchResults] = useState<Note[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
+
+  // Get translated text
+  const t = (key: string) => i18n[language][key] || key;
 
   // Get time-based greeting
   const getTimeBasedGreeting = () => {
     const hour = new Date().getHours();
     if (hour >= 5 && hour < 12) {
-      return 'Good morning.';
+      return t('goodMorning');
     } else if (hour >= 12 && hour < 17) {
-      return 'Good afternoon.';
+      return t('goodAfternoon');
     } else {
-      return 'Good evening.';
+      return t('goodEvening');
     }
   };
 
@@ -113,10 +116,10 @@ const App: React.FC = () => {
 
   const handleRecordingComplete = async (blob: Blob, duration: number) => {
     setView(AppView.DASHBOARD);
-    setProcessingState({ isProcessing: true, status: 'Initializing voice pipeline...' });
+    setProcessingState({ isProcessing: true, status: t('processing') });
 
     try {
-      const { note, embedding } = await prepareAssistantNote(blob, duration, llmConfig, status =>
+      const { note, embedding } = await prepareAssistantNote(blob, duration, llmConfig, language, status =>
         setProcessingState({ isProcessing: true, status }),
       );
 
@@ -153,27 +156,27 @@ const App: React.FC = () => {
                 className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors ${view === AppView.DASHBOARD ? 'bg-plaud-gray text-white' : 'hover:bg-plaud-gray/50 text-plaud-gray'}`}
             >
                 <BrainIcon className="w-5 h-5" />
-                <span className="font-medium">My Notes</span>
+                <span className="font-medium">{t('myNotes')}</span>
             </button>
             <button 
                 onClick={() => { setView(AppView.CHAT); setActiveNote(null); }}
                 className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors ${view === AppView.CHAT ? 'bg-plaud-gray text-white' : 'hover:bg-plaud-gray/50 text-plaud-gray'}`}
             >
                 <ChatIcon className="w-5 h-5" />
-                <span className="font-medium">Chat with AI</span>
+                <span className="font-medium">{t('chatWithAI')}</span>
             </button>
             <button 
-                onClick={() => setShowSettings(true)}
-                className="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors hover:bg-plaud-gray/50 text-plaud-gray"
+                onClick={() => { setView(AppView.SETTINGS); setActiveNote(null); }}
+                className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors ${view === AppView.SETTINGS ? 'bg-plaud-gray text-white' : 'hover:bg-plaud-gray/50 text-plaud-gray'}`}
             >
                 <SettingsIcon className="w-5 h-5" />
-                <span className="font-medium">Settings</span>
+                <span className="font-medium">{t('settings')}</span>
             </button>
         </nav>
 
         <div className="mt-auto">
              <div className="p-4 bg-plaud-dark rounded-xl border border-plaud-gray/50">
-                <p className="text-xs text-plaud-gray mb-2 font-mono">STORAGE (LOCAL)</p>
+                <p className="text-xs text-plaud-gray mb-2 font-mono">{t('storage')}</p>
                 <div className="w-full h-1.5 bg-plaud-black rounded-full overflow-hidden">
                     <div className="h-full bg-plaud-accent w-[15%]"></div>
                 </div>
@@ -206,7 +209,7 @@ const App: React.FC = () => {
                    <div className="relative max-w-xl flex-1">
                       <input
                           type="text"
-                          placeholder="Search memories (MongoDB Atlas Vector Search)..."
+                          placeholder={t('search')}
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                           className="w-full bg-plaud-dark border border-plaud-gray rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:border-plaud-accent focus:ring-1 focus:ring-plaud-accent transition-all"
@@ -215,7 +218,7 @@ const App: React.FC = () => {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                       </svg>
                       <div className="mt-2 text-xs text-plaud-gray flex items-center gap-2">
-                        {isSearching ? <span className="text-plaud-accent">Searching Atlas...</span> : <span>Vector results merge with local cache.</span>}
+                        {isSearching ? <span className="text-plaud-accent">{t('searching')}</span> : <span>{t('searchHint')}</span>}
                         {searchError && <span className="text-red-400">{searchError}</span>}
                       </div>
                    </div>
@@ -223,7 +226,7 @@ const App: React.FC = () => {
               </div>
 
               <div className="flex-1 overflow-y-auto pb-24">
-                 <NoteList notes={displayedNotes} onSelectNote={handleNoteSelect} />
+                 <NoteList notes={displayedNotes} onSelectNote={handleNoteSelect} language={language} />
               </div>
               
               {/* Floating Action Button */}
@@ -233,7 +236,7 @@ const App: React.FC = () => {
                     className="group flex items-center justify-center w-16 h-16 bg-plaud-accent rounded-full text-plaud-black shadow-lg hover:scale-110 transition-transform duration-200"
                   >
                      <MicIcon className="w-8 h-8" />
-                     <span className="absolute right-full mr-4 bg-plaud-dark text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-plaud-gray">New Note</span>
+                     <span className="absolute right-full mr-4 bg-plaud-dark text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-plaud-gray">{t('newNote')}</span>
                   </button>
               </div>
            </div>
@@ -242,12 +245,13 @@ const App: React.FC = () => {
         {view === AppView.RECORDING && (
             <Recorder 
                 onRecordingComplete={handleRecordingComplete} 
-                onCancel={() => setView(AppView.DASHBOARD)} 
+                onCancel={() => setView(AppView.DASHBOARD)}
+                language={language}
             />
         )}
 
         {view === AppView.CHAT && (
-            <ChatPage llmConfig={llmConfig} />
+            <ChatPage llmConfig={llmConfig} language={language} />
         )}
 
         {view === AppView.NOTE_DETAIL && activeNote && (
@@ -256,19 +260,21 @@ const App: React.FC = () => {
                 llmConfig={llmConfig}
                 onBack={() => { setActiveNote(null); setView(AppView.DASHBOARD); }}
                 onDelete={reloadNotes}
+                language={language}
+            />
+        )}
+
+        {view === AppView.SETTINGS && (
+            <Settings
+                llmConfig={llmConfig}
+                onConfigChange={setLlmConfig}
+                language={language}
+                onLanguageChange={setLanguage}
+                onBack={() => setView(AppView.DASHBOARD)}
             />
         )}
 
       </main>
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <Settings
-          llmConfig={llmConfig}
-          onConfigChange={setLlmConfig}
-          onClose={() => setShowSettings(false)}
-        />
-      )}
     </div>
   );
 };

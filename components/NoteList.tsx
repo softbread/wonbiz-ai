@@ -1,19 +1,23 @@
 import React from 'react';
-import { Note } from '../types';
+import { Note, AppLanguage, i18n } from '../types';
 import { PlayIcon, BrainIcon } from './Icons';
 import { formatDuration } from '../services/audioUtils';
 
 interface NoteListProps {
   notes: Note[];
   onSelectNote: (note: Note) => void;
+  language?: AppLanguage;
 }
 
-const NoteList: React.FC<NoteListProps> = ({ notes, onSelectNote }) => {
+const NoteList: React.FC<NoteListProps> = ({ notes, onSelectNote, language = 'en' }) => {
+  // Get translated text
+  const t = (key: string) => i18n[language][key] || key;
+
   if (notes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-plaud-gray">
         <BrainIcon className="w-12 h-12 mb-4 opacity-50" />
-        <p>No memories yet. Start recording.</p>
+        <p>{language === 'zh' ? '还没有笔记。开始录音吧。' : 'No memories yet. Start recording.'}</p>
       </div>
     );
   }

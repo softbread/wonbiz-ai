@@ -1,4 +1,4 @@
-import { LLMConfig, Note, ChatSession, ChatMessage } from '../types';
+import { LLMConfig, Note, ChatSession, ChatMessage, AppLanguage } from '../types';
 
 const ASSEMBLY_API_KEY = import.meta.env.VITE_ASSEMBLYAI_API_KEY || '';
 const LLAMA_CLOUD_API_KEY = import.meta.env.VITE_LLAMA_CLOUD_API_KEY || '';
@@ -37,7 +37,7 @@ export interface VectorSearchResult {
   llmProvider?: string;
 }
 
-export const transcribeWithAssemblyAI = async (audioBlob: Blob, onStatus?: (s: string) => void) => {
+export const transcribeWithAssemblyAI = async (audioBlob: Blob, language: AppLanguage = 'en', onStatus?: (s: string) => void) => {
   if (!ASSEMBLY_API_KEY) throw new Error('Missing AssemblyAI API key');
   onStatus?.('Uploading to AssemblyAI...');
 
@@ -56,7 +56,7 @@ export const transcribeWithAssemblyAI = async (audioBlob: Blob, onStatus?: (s: s
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ audioBlob: base64Audio }),
+    body: JSON.stringify({ audioBlob: base64Audio, language }),
   });
 
   if (!response.ok) {
@@ -69,7 +69,7 @@ export const transcribeWithAssemblyAI = async (audioBlob: Blob, onStatus?: (s: s
   return data.transcript;
 };
 
-export const runLlamaIndexOrchestration = async (transcript: string, llmConfig: LLMConfig) => {
+export const runLlamaIndexOrchestration = async (transcript: string, llmConfig: LLMConfig, language: AppLanguage = 'en') => {
   if (!LLAMA_CLOUD_API_KEY) throw new Error('Missing LlamaIndex (LlamaCloud) API key');
 
   console.log('Making orchestration API call to backend...');
@@ -78,7 +78,7 @@ export const runLlamaIndexOrchestration = async (transcript: string, llmConfig: 
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ transcript, llmConfig }),
+    body: JSON.stringify({ transcript, llmConfig, language }),
   });
 
   if (!response.ok) {
@@ -317,9 +317,10 @@ export const prepareAssistantNote = async (
   audioBlob: Blob,
   duration: number,
   llmConfig: LLMConfig,
+  language: AppLanguage = 'en',
   onStatus?: (s: string) => void,
 ): Promise<{ note: Note; embedding: number[] }> => {
-  console.log('Starting prepareAssistantNote with blob size:', audioBlob.size, 'duration:', duration);
+  console.log('Starting prepareAssistantNote with blob size:', audioBlob.size, 'duration:', duration, 'language:', language);
   
   if (audioBlob.size === 0) {
     throw new Error('Audio blob is empty');
@@ -329,13 +330,13 @@ export const prepareAssistantNote = async (
     throw new Error(`Recording is too short (${duration.toFixed(1)}s). Please record for at least 1 second.`);
   }
   
-  onStatus?.('Transcribing with AssemblyAI...');
-  const transcript = await transcribeWithAssemblyAI(audioBlob, onStatus);
+  onStatus?.(language === 'zh' ? '正在转录音频...' : 'Transcribing with AssemblyAI...');
+  const transcript = await transcribeWithAssemblyAI(audioBlob, language, onStatus);
 
-  onStatus?.('Running LlamaIndex orchestration...');
-  const analysis = await runLlamaIndexOrchestration(transcript, llmConfig);
+  onStatus?.(language === 'zh' ? '正在分析内容...' : 'Running LlamaIndex orchestration...');
+  const analysis = await runLlamaIndexOrchestration(transcript, llmConfig, language);
 
-  onStatus?.('Generating vector embedding...');
+  onStatus?.(language === 'zh' ? '正在生成向量...' : 'Generating vector embedding...');
   const embedding = await embedTranscript(transcript);
 
   const note: Note = {
@@ -344,8 +345,8 @@ export const prepareAssistantNote = async (
     duration,
     audioBlob,
     transcript: analysis.transcript || transcript,
-    summary: analysis.summary || 'No summary available.',
-    title: analysis.title || 'Untitled Recording',
+    summary: analysis.summary || (language === 'zh' ? '摘要不可用。' : 'No summary available.'),
+    title: analysis.title || (language === 'zh' ? '未命名录音' : 'Untitled Recording'),
     tags: analysis.tags || [],
     llmProvider: llmConfig.provider,
   };

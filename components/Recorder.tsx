@@ -1,16 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MicIcon, StopIcon } from './Icons';
 import { formatDuration } from '../services/audioUtils';
+import { AppLanguage, i18n } from '../types';
 
 interface RecorderProps {
   onRecordingComplete: (blob: Blob, duration: number) => void;
   onCancel: () => void;
+  language?: AppLanguage;
 }
 
-const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel }) => {
+const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel, language = 'en' }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [audioLevel, setAudioLevel] = useState<number[]>(new Array(10).fill(10));
+  
+  // Get translated text
+  const t = (key: string) => i18n[language][key] || key;
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -117,7 +122,7 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel }) =>
   return (
     <div className="flex flex-col items-center justify-center h-full space-y-10 animate-fade-in">
       <div className="text-center space-y-2">
-        <h2 className="text-2xl font-light text-plaud-text tracking-wide">Recording Voice Note</h2>
+        <h2 className="text-2xl font-light text-plaud-text tracking-wide">{t('recording')}</h2>
         <p className="text-plaud-gray text-sm font-mono tracking-widest uppercase">AssemblyAI + LlamaIndex</p>
       </div>
 
@@ -141,7 +146,7 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel }) =>
           onClick={onCancel}
           className="px-8 py-3 rounded-full text-plaud-text border border-plaud-gray hover:bg-plaud-gray transition-colors"
         >
-          Cancel
+          {t('cancel')}
         </button>
 
         <button 
