@@ -11,7 +11,7 @@ This directory contains the configuration needed to deploy WonBiz AI to AWS ECS 
    - VPC subnets and security groups that allow traffic to ports 80 (frontend) and 3001 (API) as needed.
 
 2. **GitHub secrets** (used by the workflow)
-   - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (or OIDC role permissions).
+   - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` or `AWS_ROLE_TO_ASSUME` (for OIDC authentication).
    - `AWS_REGION`
    - `ECS_CLUSTER` and `ECS_SERVICE` names to deploy to.
    - `ECR_REPOSITORY_FRONTEND` and `ECR_REPOSITORY_SERVER` repository names.
