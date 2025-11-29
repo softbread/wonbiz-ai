@@ -9,7 +9,7 @@
   "containerDefinitions": [
     {
       "name": "frontend",
-      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/wonbiz-ai-frontend:latest",
+      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/wonbiz-ai-frontend:PLACEHOLDER_REPLACED_BY_CI",
       "essential": true,
       "portMappings": [
         { "containerPort": 80, "protocol": "tcp" }
@@ -29,7 +29,7 @@
     },
     {
       "name": "api",
-      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/wonbiz-ai-server:latest",
+      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/wonbiz-ai-server:PLACEHOLDER_REPLACED_BY_CI",
       "essential": true,
       "portMappings": [
         { "containerPort": 3001, "protocol": "tcp" }
