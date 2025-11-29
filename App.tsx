@@ -48,24 +48,25 @@ const App: React.FC = () => {
     if (token && userStr) {
       try {
         const user = JSON.parse(userStr) as User;
-        // Verify token is still valid
+        // Immediately set auth state with cached values
+        setAuthState({ user, token, isAuthenticated: true });
+        setIsAuthLoading(false);
+        
+        // Verify token in background - if invalid, log out
         fetch('http://localhost:3001/api/auth/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         })
           .then(res => {
-            if (res.ok) {
-              setAuthState({ user, token, isAuthenticated: true });
-            } else {
-              // Token invalid, clear storage
+            if (!res.ok) {
+              // Token invalid, clear storage and log out
               localStorage.removeItem(AUTH_TOKEN_KEY);
               localStorage.removeItem(AUTH_USER_KEY);
+              setAuthState({ user: null, token: null, isAuthenticated: false });
             }
           })
           .catch(() => {
-            // Network error, still try to use cached auth
-            setAuthState({ user, token, isAuthenticated: true });
-          })
-          .finally(() => setIsAuthLoading(false));
+            // Network error, keep using cached auth
+          });
       } catch {
         localStorage.removeItem(AUTH_TOKEN_KEY);
         localStorage.removeItem(AUTH_USER_KEY);

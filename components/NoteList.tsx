@@ -28,7 +28,7 @@ const NoteList: React.FC<NoteListProps> = ({ notes, onSelectNote, language = 'en
         <div 
           key={note.id} 
           onClick={() => onSelectNote(note)}
-          className="group bg-wonbiz-dark border border-wonbiz-gray rounded-xl p-6 cursor-pointer hover:border-wonbiz-accent transition-all hover:shadow-2xl hover:shadow-wonbiz-gray/10"
+          className="group bg-wonbiz-dark border border-wonbiz-gray rounded-xl p-6 cursor-pointer hover:border-wonbiz-accent transition-all hover:shadow-2xl hover:shadow-wonbiz-gray/10 flex flex-col"
         >
           <div className="flex justify-between items-start mb-4">
             <div className="bg-wonbiz-gray/50 rounded-full p-2">
@@ -40,7 +40,7 @@ const NoteList: React.FC<NoteListProps> = ({ notes, onSelectNote, language = 'en
           </div>
           
           <h3 className="text-lg font-medium text-white mb-2 line-clamp-2">{note.title}</h3>
-          <p className="text-sm text-wonbiz-text/70 line-clamp-3 mb-4 h-12">
+          <p className="text-sm text-wonbiz-text/70 line-clamp-3 mb-4 h-[60px]">
             {note.summary}
           </p>
 

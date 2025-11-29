@@ -564,23 +564,16 @@ app.post('/api/transcribe', async (req, res) => {
     const audioUrl = uploadData.upload_url;
     console.log('Audio uploaded successfully, URL:', audioUrl);
 
-    // Step 2: Request transcription
-    // Build transcription config based on language setting
+    // Step 2: Request transcription with automatic language detection
+    // Always use language detection to transcribe in the original language of the speech
     const transcriptionConfig = {
       audio_url: audioUrl,
       punctuate: true,
       format_text: true,
+      language_detection: true, // Auto-detect language from audio
     };
 
-    // If language is specified as Chinese, use zh language code
-    // Otherwise use automatic language detection
-    if (language === 'zh') {
-      transcriptionConfig.language_code = 'zh';
-    } else if (language === 'en') {
-      transcriptionConfig.language_code = 'en';
-    } else {
-      transcriptionConfig.language_detection = true;
-    }
+    console.log('Using automatic language detection for transcription');
 
     const transcribeResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
       method: 'POST',
@@ -619,8 +612,12 @@ app.post('/api/transcribe', async (req, res) => {
       const statusData = await statusResponse.json();
 
       if (statusData.status === 'completed') {
-        console.log('Transcription completed successfully');
-        res.json({ transcript: statusData.text || 'Transcription completed but no text available.' });
+        const detectedLanguage = statusData.language_code || 'en';
+        console.log('Transcription completed successfully, detected language:', detectedLanguage);
+        res.json({ 
+          transcript: statusData.text || 'Transcription completed but no text available.',
+          detectedLanguage: detectedLanguage,
+        });
         return;
       } else if (statusData.status === 'error') {
         console.error('Transcription failed:', statusData.error);
@@ -783,7 +780,7 @@ app.post('/api/notes/search', authenticateToken, async (req, res) => {
   }
 });
 
-// Get all notes (filtered by user)
+// Get all notes (filtered by user) - excludes audio data and transcript for faster loading
 app.get('/api/notes', authenticateToken, async (req, res) => {
   try {
     if (!notesCollection) {
@@ -792,8 +789,19 @@ app.get('/api/notes', authenticateToken, async (req, res) => {
 
     console.log('GET /api/notes - userId:', req.user.userId);
 
+    // Exclude audioData and transcript from projection for faster loading
     const notes = await notesCollection
       .find({ userId: req.user.userId })
+      .project({
+        _id: 1,
+        title: 1,
+        summary: 1,
+        tags: 1,
+        createdAt: 1,
+        duration: 1,
+        llmProvider: 1,
+        // transcript and audioData excluded for performance
+      })
       .sort({ createdAt: -1 })
       .limit(100)
       .toArray();
@@ -804,18 +812,52 @@ app.get('/api/notes', authenticateToken, async (req, res) => {
       id: doc._id,
       title: doc.title,
       summary: doc.summary,
-      transcript: doc.transcript,
+      transcript: '', // Not included in list view
       tags: doc.tags || [],
       createdAt: doc.createdAt,
       duration: doc.duration || 0,
-      audioData: doc.audioData || null, // base64 encoded audio
-      audioMimeType: doc.audioMimeType || null,
+      audioData: null, // Not included in list view
+      audioMimeType: null,
       llmProvider: doc.llmProvider,
     }));
 
     res.json({ notes: formattedNotes });
   } catch (error) {
     console.error('Get notes error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get single note with audio data
+app.get('/api/notes/:id', authenticateToken, async (req, res) => {
+  try {
+    if (!notesCollection) {
+      return res.status(503).json({ error: 'MongoDB not connected' });
+    }
+
+    const { id } = req.params;
+    const note = await notesCollection.findOne({ _id: id, userId: req.user.userId });
+
+    if (!note) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+
+    res.json({
+      note: {
+        id: note._id,
+        title: note.title,
+        summary: note.summary,
+        transcript: note.transcript,
+        tags: note.tags || [],
+        createdAt: note.createdAt,
+        duration: note.duration || 0,
+        audioData: note.audioData || null,
+        audioMimeType: note.audioMimeType || null,
+        llmProvider: note.llmProvider,
+      },
+    });
+  } catch (error) {
+    console.error('Get note error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -837,6 +879,151 @@ app.delete('/api/notes/:id', authenticateToken, async (req, res) => {
     res.json({ success: true, deleted: result.deletedCount });
   } catch (error) {
     console.error('Delete error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Regenerate note summary and transcript from audio
+app.post('/api/notes/:id/regenerate', authenticateToken, async (req, res) => {
+  try {
+    if (!notesCollection) {
+      return res.status(503).json({ error: 'MongoDB not connected' });
+    }
+
+    const { id } = req.params;
+    const { llmConfig } = req.body;
+
+    if (!llmConfig) {
+      return res.status(400).json({ error: 'LLM config is required' });
+    }
+
+    // Get the note with audio data
+    const note = await notesCollection.findOne({ _id: id, userId: req.user.userId });
+    if (!note) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+
+    if (!note.audioData) {
+      return res.status(400).json({ error: 'No audio data available for this note' });
+    }
+
+    console.log('Regenerating note:', id);
+
+    // Step 1: Re-transcribe the audio
+    const audioBuffer = Buffer.from(note.audioData, 'base64');
+
+    // Upload to AssemblyAI
+    const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': ASSEMBLY_API_KEY,
+        'Content-Type': 'application/octet-stream',
+      },
+      body: audioBuffer,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error('Audio upload failed');
+    }
+
+    const uploadData = await uploadResponse.json();
+    const audioUrl = uploadData.upload_url;
+
+    // Request transcription with language detection
+    const transcribeResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
+      method: 'POST',
+      headers: {
+        'Authorization': ASSEMBLY_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        audio_url: audioUrl,
+        punctuate: true,
+        format_text: true,
+        language_detection: true,
+      }),
+    });
+
+    if (!transcribeResponse.ok) {
+      throw new Error('Transcription request failed');
+    }
+
+    const transcribeData = await transcribeResponse.json();
+    const transcriptId = transcribeData.id;
+
+    // Poll for completion
+    let transcript = '';
+    let detectedLanguage = 'en';
+    let attempts = 0;
+    const maxAttempts = 60;
+
+    while (attempts < maxAttempts) {
+      const statusResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+        headers: { 'Authorization': ASSEMBLY_API_KEY },
+      });
+
+      const statusData = await statusResponse.json();
+
+      if (statusData.status === 'completed') {
+        transcript = statusData.text || '';
+        detectedLanguage = statusData.language_code || 'en';
+        break;
+      } else if (statusData.status === 'error') {
+        throw new Error(`Transcription failed: ${statusData.error}`);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      attempts++;
+    }
+
+    if (!transcript) {
+      throw new Error('Transcription timed out');
+    }
+
+    console.log('Transcription completed, detected language:', detectedLanguage);
+
+    // Step 2: Run orchestration to get summary, title, tags
+    const orchestrationLanguage = detectedLanguage.startsWith('zh') ? 'zh' : 'en';
+    const analysis = await orchestrateWithLlamaIndex(transcript, llmConfig, orchestrationLanguage);
+
+    // Step 3: Generate new embedding
+    const embedding = await generateEmbedding(transcript);
+
+    // Step 4: Update the note
+    const updateResult = await notesCollection.updateOne(
+      { _id: id, userId: req.user.userId },
+      {
+        $set: {
+          transcript: analysis.transcript || transcript,
+          summary: analysis.summary || (orchestrationLanguage === 'zh' ? '摘要不可用。' : 'No summary available.'),
+          title: analysis.title || (orchestrationLanguage === 'zh' ? '未命名录音' : 'Untitled Recording'),
+          tags: analysis.tags || [],
+          embedding: embedding,
+          llmProvider: llmConfig.provider,
+          updatedAt: Date.now(),
+        },
+      }
+    );
+
+    if (updateResult.modifiedCount === 0) {
+      throw new Error('Failed to update note');
+    }
+
+    console.log('Note regenerated successfully:', id);
+
+    res.json({
+      success: true,
+      note: {
+        id: id,
+        transcript: analysis.transcript || transcript,
+        summary: analysis.summary,
+        title: analysis.title,
+        tags: analysis.tags || [],
+        llmProvider: llmConfig.provider,
+      },
+    });
+  } catch (error) {
+    console.error('Regenerate error:', error);
     res.status(500).json({ error: error.message });
   }
 });

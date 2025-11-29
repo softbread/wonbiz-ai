@@ -14,11 +14,22 @@ const LLAMA_BASE_URL = 'https://api.llamaindex.ai/api/v1';
 
 // Get auth token from localStorage
 const getAuthToken = (): string | null => {
-  return localStorage.getItem('wonbiz_auth_token');
+  const token = localStorage.getItem('wonbiz_auth_token');
+  console.log('getAuthToken called, token exists:', !!token);
+  return token;
 };
 
 // Get authenticated headers
 const getAuthHeaders = (): Record<string, string> => {
+  const token = getAuthToken();
+  if (token) {
+    return { 'Authorization': `Bearer ${token}` };
+  }
+  return {};
+};
+
+// Get authenticated headers with Content-Type for POST/PUT requests
+const getAuthHeadersWithContentType = (): Record<string, string> => {
   const token = getAuthToken();
   return {
     'Content-Type': 'application/json',
@@ -51,7 +62,7 @@ export interface VectorSearchResult {
   llmProvider?: string;
 }
 
-export const transcribeWithAssemblyAI = async (audioBlob: Blob, language: AppLanguage = 'en', onStatus?: (s: string) => void) => {
+export const transcribeWithAssemblyAI = async (audioBlob: Blob, language: AppLanguage = 'en', onStatus?: (s: string) => void): Promise<{ transcript: string; detectedLanguage: string }> => {
   if (!ASSEMBLY_API_KEY) throw new Error('Missing AssemblyAI API key');
   onStatus?.('Uploading to AssemblyAI...');
 
@@ -80,7 +91,10 @@ export const transcribeWithAssemblyAI = async (audioBlob: Blob, language: AppLan
   }
 
   const data = await response.json();
-  return data.transcript;
+  return {
+    transcript: data.transcript,
+    detectedLanguage: data.detectedLanguage || 'en',
+  };
 };
 
 export const runLlamaIndexOrchestration = async (transcript: string, llmConfig: LLMConfig, language: AppLanguage = 'en') => {
@@ -152,7 +166,7 @@ export const upsertNoteToMongo = async (note: Note, embedding: number[]) => {
 
     const response = await fetch(`${API_BASE_URL}/api/notes`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({ note: noteToSend, embedding }),
     });
 
@@ -169,7 +183,7 @@ export const vectorSearchNotes = async (query: string): Promise<Note[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/notes/search`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({ query }),
     });
 
@@ -196,29 +210,32 @@ export const vectorSearchNotes = async (query: string): Promise<Note[]> => {
   }
 };
 
-// Get all notes from backend
+// Get all notes from backend (without audio data for fast loading)
 export const getAllNotesFromMongo = async (): Promise<Note[]> => {
   try {
+    console.log('getAllNotesFromMongo: Starting fetch...');
+    const headers = getAuthHeaders();
+    
     const response = await fetch(`${API_BASE_URL}/api/notes`, {
-      headers: getAuthHeaders(),
+      headers,
     });
 
+    console.log('getAllNotesFromMongo: Response status:', response.status);
+
     if (!response.ok) {
-      console.warn('Failed to fetch notes:', await response.text());
+      const errorText = await response.text();
+      console.warn('Failed to fetch notes:', errorText);
       return [];
     }
 
     const data = await response.json();
     const notes = data.notes || [];
+    console.log('getAllNotesFromMongo: Received notes:', notes.length);
 
-    // Reconstruct audioBlob from audioData for each note
+    // Audio data is not included in list view - will be fetched when viewing note detail
     return notes.map((note: any) => ({
       ...note,
-      audioBlob: note.audioData
-        ? new Blob([Uint8Array.from(atob(note.audioData), c => c.charCodeAt(0))], {
-            type: note.audioMimeType || 'audio/webm'
-          })
-        : null,
+      audioBlob: null, // Audio loaded on demand via getNoteWithAudio
     }));
   } catch (error) {
     console.warn('Fetch notes error:', error);
@@ -238,6 +255,73 @@ export const deleteNoteFromMongo = async (noteId: string): Promise<boolean> => {
   } catch (error) {
     console.warn('Delete note error:', error);
     return false;
+  }
+};
+
+// Get single note with audio data (for note detail view)
+export const getNoteWithAudio = async (noteId: string): Promise<Note | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/notes/${noteId}`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      console.warn('Failed to fetch note:', await response.text());
+      return null;
+    }
+
+    const data = await response.json();
+    const note = data.note;
+    
+    if (!note) return null;
+
+    return {
+      ...note,
+      audioBlob: note.audioData
+        ? new Blob([Uint8Array.from(atob(note.audioData), c => c.charCodeAt(0))], {
+            type: note.audioMimeType || 'audio/webm'
+          })
+        : null,
+    };
+  } catch (error) {
+    console.warn('Fetch note error:', error);
+    return null;
+  }
+};
+
+// Regenerate note transcript and summary from audio
+export const regenerateNote = async (
+  noteId: string,
+  llmConfig: LLMConfig,
+  onStatus?: (status: string) => void
+): Promise<{ transcript: string; summary: string; title: string; tags: string[] } | null> => {
+  try {
+    onStatus?.('Regenerating transcript and summary...');
+    
+    const response = await fetch(`${API_BASE_URL}/api/notes/${noteId}/regenerate`, {
+      method: 'POST',
+      headers: getAuthHeadersWithContentType(),
+      body: JSON.stringify({ llmConfig }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn('Failed to regenerate note:', errorText);
+      throw new Error(errorText);
+    }
+
+    const data = await response.json();
+    onStatus?.('Regeneration complete!');
+    
+    return {
+      transcript: data.note.transcript,
+      summary: data.note.summary,
+      title: data.note.title,
+      tags: data.note.tags,
+    };
+  } catch (error) {
+    console.warn('Regenerate note error:', error);
+    throw error;
   }
 };
 
@@ -334,7 +418,7 @@ export const prepareAssistantNote = async (
   language: AppLanguage = 'en',
   onStatus?: (s: string) => void,
 ): Promise<{ note: Note; embedding: number[] }> => {
-  console.log('Starting prepareAssistantNote with blob size:', audioBlob.size, 'duration:', duration, 'language:', language);
+  console.log('Starting prepareAssistantNote with blob size:', audioBlob.size, 'duration:', duration, 'UI language:', language);
   
   if (audioBlob.size === 0) {
     throw new Error('Audio blob is empty');
@@ -345,12 +429,16 @@ export const prepareAssistantNote = async (
   }
   
   onStatus?.(language === 'zh' ? '正在转录音频...' : 'Transcribing with AssemblyAI...');
-  const transcript = await transcribeWithAssemblyAI(audioBlob, language, onStatus);
+  const { transcript, detectedLanguage } = await transcribeWithAssemblyAI(audioBlob, language, onStatus);
+  
+  // Use detected language for orchestration (summarize in the same language as the speech)
+  const orchestrationLanguage = detectedLanguage.startsWith('zh') ? 'zh' : 'en';
+  console.log('Detected speech language:', detectedLanguage, '-> orchestration language:', orchestrationLanguage);
 
-  onStatus?.(language === 'zh' ? '正在分析内容...' : 'Running LlamaIndex orchestration...');
-  const analysis = await runLlamaIndexOrchestration(transcript, llmConfig, language);
+  onStatus?.(orchestrationLanguage === 'zh' ? '正在分析内容...' : 'Running LlamaIndex orchestration...');
+  const analysis = await runLlamaIndexOrchestration(transcript, llmConfig, orchestrationLanguage as AppLanguage);
 
-  onStatus?.(language === 'zh' ? '正在生成向量...' : 'Generating vector embedding...');
+  onStatus?.(orchestrationLanguage === 'zh' ? '正在生成向量...' : 'Generating vector embedding...');
   const embedding = await embedTranscript(transcript);
 
   const note: Note = {
@@ -359,8 +447,8 @@ export const prepareAssistantNote = async (
     duration,
     audioBlob,
     transcript: analysis.transcript || transcript,
-    summary: analysis.summary || (language === 'zh' ? '摘要不可用。' : 'No summary available.'),
-    title: analysis.title || (language === 'zh' ? '未命名录音' : 'Untitled Recording'),
+    summary: analysis.summary || (orchestrationLanguage === 'zh' ? '摘要不可用。' : 'No summary available.'),
+    title: analysis.title || (orchestrationLanguage === 'zh' ? '未命名录音' : 'Untitled Recording'),
     tags: analysis.tags || [],
     llmProvider: llmConfig.provider,
   };
