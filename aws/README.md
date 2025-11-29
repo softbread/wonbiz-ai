@@ -50,3 +50,5 @@ Attach both target groups to the same ECS service so each hostname routes to the
 ## Customizing the task definition
 
 Update `aws/ecs-task-def.json` with your AWS account ID, region, IAM role ARNs, VPC settings, and the SSM parameter paths you use. You can also add additional environment variables or secrets for the API container as needed.
+
+> **Note:** The image tags in `aws/ecs-task-def.json` use `:PLACEHOLDER_REPLACED_BY_CI` instead of a real tag like `:latest`. This is intentional—the CI workflow uses the `amazon-ecs-render-task-definition` action to replace these placeholder URIs with images tagged by the commit SHA (`${{ github.sha }}`). Do not manually change these tags; the workflow handles image tagging automatically.
