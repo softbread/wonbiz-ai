@@ -4,6 +4,9 @@ import { MongoClient } from 'mongodb';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdf = require('pdf-parse');
 
 dotenv.config();
 
@@ -636,6 +639,92 @@ app.post('/api/transcribe', async (req, res) => {
   }
 });
 
+// Process PDF and create a note
+app.post('/api/upload-pdf', authenticateToken, async (req, res) => {
+  try {
+    const { pdfData, llmConfig, language } = req.body;
+    if (!pdfData) {
+      return res.status(400).json({ error: 'PDF data is required' });
+    }
+
+    if (!llmConfig) {
+      return res.status(400).json({ error: 'LLM config is required' });
+    }
+
+    console.log('Processing PDF upload...');
+
+    // Decode base64 PDF data
+    const pdfBuffer = Buffer.from(pdfData, 'base64');
+    console.log('PDF buffer size:', pdfBuffer.length);
+
+    // Parse PDF to extract text
+    let pdfText = '';
+    try {
+      const pdfResult = await pdf(pdfBuffer);
+      pdfText = pdfResult.text;
+      console.log('Extracted text length:', pdfText.length, 'pages:', pdfResult.numpages);
+    } catch (pdfError) {
+      console.error('PDF parsing error:', pdfError);
+      throw new Error('Failed to parse PDF. The file may be corrupted or password-protected.');
+    }
+
+    if (!pdfText || pdfText.trim().length === 0) {
+      throw new Error('No text content could be extracted from the PDF. It may be an image-based PDF.');
+    }
+
+    // Use the extracted text as transcript
+    const transcript = pdfText.trim();
+
+    // Run LlamaIndex orchestration to get summary, title, tags
+    const orchestrationLanguage = language || 'en';
+    console.log('Running orchestration for PDF content, language:', orchestrationLanguage);
+    const analysis = await orchestrateWithLlamaIndex(transcript, llmConfig, orchestrationLanguage);
+
+    // Generate embedding for vector search
+    const embedding = await generateEmbedding(transcript);
+
+    // Create the note
+    const noteId = `note_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    const note = {
+      _id: noteId,
+      title: analysis.title || (orchestrationLanguage === 'zh' ? '未命名PDF' : 'Untitled PDF'),
+      transcript: analysis.transcript || transcript,
+      summary: analysis.summary || (orchestrationLanguage === 'zh' ? '摘要不可用。' : 'No summary available.'),
+      tags: analysis.tags || [],
+      duration: 0, // No duration for PDFs
+      createdAt: Date.now(),
+      llmProvider: llmConfig.provider,
+      userId: req.user.userId,
+      embedding: embedding,
+      sourceType: 'pdf', // Mark as PDF source
+    };
+
+    // Save to MongoDB
+    if (notesCollection) {
+      await notesCollection.insertOne(note);
+      console.log('PDF note saved to MongoDB:', noteId);
+    }
+
+    res.json({
+      success: true,
+      note: {
+        id: noteId,
+        title: note.title,
+        transcript: note.transcript,
+        summary: note.summary,
+        tags: note.tags,
+        duration: note.duration,
+        createdAt: note.createdAt,
+        llmProvider: note.llmProvider,
+        sourceType: 'pdf',
+      },
+    });
+  } catch (error) {
+    console.error('PDF upload error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Orchestrate with LlamaIndex
 app.post('/api/orchestrate', async (req, res) => {
   try {
@@ -800,6 +889,7 @@ app.get('/api/notes', authenticateToken, async (req, res) => {
         createdAt: 1,
         duration: 1,
         llmProvider: 1,
+        sourceType: 1,
         // transcript and audioData excluded for performance
       })
       .sort({ createdAt: -1 })
@@ -819,6 +909,7 @@ app.get('/api/notes', authenticateToken, async (req, res) => {
       audioData: null, // Not included in list view
       audioMimeType: null,
       llmProvider: doc.llmProvider,
+      sourceType: doc.sourceType || 'audio',
     }));
 
     res.json({ notes: formattedNotes });
@@ -854,6 +945,7 @@ app.get('/api/notes/:id', authenticateToken, async (req, res) => {
         audioData: note.audioData || null,
         audioMimeType: note.audioMimeType || null,
         llmProvider: note.llmProvider,
+        sourceType: note.sourceType || 'audio',
       },
     });
   } catch (error) {

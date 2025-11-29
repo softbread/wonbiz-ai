@@ -11,6 +11,7 @@ export interface Note {
   audioMimeType?: string | null; // MIME type of the audio
   vectorScore?: number;
   llmProvider?: string;
+  sourceType?: 'audio' | 'pdf'; // Source type of the note
 }
 
 // User types for authentication

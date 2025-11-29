@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Note, ChatMessage, LLMConfig, AppLanguage, i18n } from '../types';
-import { ChevronLeftIcon, SendIcon, PlayIcon, PauseIcon, TrashIcon, RefreshIcon } from './Icons';
+import { ChevronLeftIcon, SendIcon, PlayIcon, PauseIcon, TrashIcon, RefreshIcon, DocumentIcon } from './Icons';
 import { chatAboutTranscript, deleteNoteFromMongo, getNoteWithAudio, regenerateNote } from '../services/assistantService';
 import { formatDuration } from '../services/audioUtils';
 
@@ -44,6 +44,25 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDele
   // Fetch full note data (audio + transcript) on mount if not already present
   useEffect(() => {
     if (note.id) {
+      // Skip audio loading for PDF notes
+      if (note.sourceType === 'pdf') {
+        // Still fetch transcript for PDF notes
+        setIsLoadingAudio(true);
+        getNoteWithAudio(note.id)
+          .then((fullNote) => {
+            if (fullNote) {
+              setCurrentNote(prev => ({
+                ...prev,
+                transcript: fullNote.transcript || prev.transcript,
+                summary: fullNote.summary || prev.summary,
+                sourceType: fullNote.sourceType || prev.sourceType,
+              }));
+            }
+          })
+          .finally(() => setIsLoadingAudio(false));
+        return;
+      }
+      
       // Always fetch full note to get transcript (since list endpoint excludes it)
       setIsLoadingAudio(true);
       getNoteWithAudio(note.id)
@@ -57,12 +76,13 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDele
               ...prev,
               transcript: fullNote.transcript || prev.transcript,
               summary: fullNote.summary || prev.summary,
+              sourceType: fullNote.sourceType || prev.sourceType,
             }));
           }
         })
         .finally(() => setIsLoadingAudio(false));
     }
-  }, [note.id]);
+  }, [note.id, note.sourceType]);
 
   useEffect(() => {
     if (audioBlob) {
@@ -260,26 +280,42 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDele
                <span key={tag} className="hidden sm:inline-block px-2 py-1 bg-wonbiz-gray/20 rounded text-xs text-wonbiz-text/60 border border-wonbiz-gray/20">#{tag}</span>
            ))}
         </div>
-        <button 
-          onClick={handleRegenerate} 
-          disabled={isRegenerating || !hasAudio}
-          className={`p-2 rounded-full transition-colors mr-1 ${
-            isRegenerating || !hasAudio 
-              ? 'text-wonbiz-gray cursor-not-allowed' 
-              : 'hover:bg-wonbiz-accent/20 text-wonbiz-accent hover:text-wonbiz-accent'
-          }`}
-          title={language === 'zh' ? '重新生成摘要和转录' : 'Regenerate summary & transcript'}
-        >
-          <RefreshIcon className={`w-5 h-5 ${isRegenerating ? 'animate-spin' : ''}`} />
-        </button>
+        {/* Only show regenerate button for audio notes */}
+        {currentNote.sourceType !== 'pdf' && (
+          <button 
+            onClick={handleRegenerate} 
+            disabled={isRegenerating || !hasAudio}
+            className={`p-2 rounded-full transition-colors mr-1 ${
+              isRegenerating || !hasAudio 
+                ? 'text-wonbiz-gray cursor-not-allowed' 
+                : 'hover:bg-wonbiz-accent/20 text-wonbiz-accent hover:text-wonbiz-accent'
+            }`}
+            title={language === 'zh' ? '重新生成摘要和转录' : 'Regenerate summary & transcript'}
+          >
+            <RefreshIcon className={`w-5 h-5 ${isRegenerating ? 'animate-spin' : ''}`} />
+          </button>
+        )}
         <button onClick={handleDelete} className="p-2 hover:bg-red-500/20 rounded-full transition-colors text-red-400 hover:text-red-300">
           <TrashIcon className="w-5 h-5" />
         </button>
       </div>
 
-      {/* Audio Player Bar */}
+      {/* Audio Player Bar / PDF Indicator */}
       <div className="bg-wonbiz-dark border-b border-wonbiz-gray px-6 py-3 flex items-center gap-4">
-        {isLoadingAudio ? (
+        {currentNote.sourceType === 'pdf' ? (
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 flex items-center justify-center bg-red-500/20 rounded-full">
+                <DocumentIcon className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <span className="text-sm text-wonbiz-text">{language === 'zh' ? 'PDF 文档' : 'PDF Document'}</span>
+                <p className="text-xs text-wonbiz-gray">{language === 'zh' ? '从PDF提取的内容' : 'Content extracted from PDF'}</p>
+              </div>
+            </div>
+            <span className="font-mono text-xs text-wonbiz-gray">LLM: {currentNote.llmProvider || llmConfig.provider}</span>
+          </div>
+        ) : isLoadingAudio ? (
           <div className="flex items-center justify-center w-full text-wonbiz-gray text-sm">
             <div className="w-4 h-4 border-2 border-wonbiz-accent border-t-transparent rounded-full animate-spin mr-2"></div>
             Loading audio...

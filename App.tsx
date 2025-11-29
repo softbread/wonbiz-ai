@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { AppView, LLMConfig, Note, ProcessingState, AppLanguage, i18n, User, AuthState } from './types';
 import Recorder from './components/Recorder';
 import NoteList from './components/NoteList';
@@ -6,13 +6,14 @@ import NoteDetail from './components/NoteDetail';
 import ChatPage from './components/ChatPage';
 import Settings from './components/Settings';
 import Login from './components/Login';
-import { MicIcon, BrainIcon, SettingsIcon, ChatIcon, LogoutIcon } from './components/Icons';
+import { MicIcon, BrainIcon, SettingsIcon, ChatIcon, LogoutIcon, DocumentIcon } from './components/Icons';
 import {
   llmOptions,
   prepareAssistantNote,
   upsertNoteToMongo,
   vectorSearchNotes,
   getAllNotesFromMongo,
+  uploadPdfAndCreateNote,
 } from './services/assistantService';
 
 const AUTH_TOKEN_KEY = 'wonbiz_auth_token';
@@ -36,6 +37,9 @@ const App: React.FC = () => {
     isAuthenticated: false,
   });
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  // PDF upload ref
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   // Get translated text
   const t = (key: string) => i18n[language][key] || key;
@@ -209,6 +213,41 @@ const App: React.FC = () => {
     setView(AppView.NOTE_DETAIL);
   };
 
+  // Handle PDF file upload
+  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Reset the input so the same file can be selected again
+    event.target.value = '';
+
+    if (file.type !== 'application/pdf') {
+      alert(language === 'zh' ? '请选择PDF文件' : 'Please select a PDF file');
+      return;
+    }
+
+    // Max file size: 10MB
+    if (file.size > 10 * 1024 * 1024) {
+      alert(language === 'zh' ? 'PDF文件大小不能超过10MB' : 'PDF file size must be less than 10MB');
+      return;
+    }
+
+    setProcessingState({ isProcessing: true, status: language === 'zh' ? '正在处理PDF...' : 'Processing PDF...' });
+
+    try {
+      const note = await uploadPdfAndCreateNote(file, llmConfig, language, status =>
+        setProcessingState({ isProcessing: true, status }),
+      );
+
+      setNotes(prev => [note, ...prev]);
+    } catch (error: any) {
+      console.error('PDF upload error:', error);
+      alert(`${language === 'zh' ? 'PDF处理失败: ' : 'Failed to process PDF: '}${error.message || 'Unknown error'}`);
+    } finally {
+      setProcessingState({ isProcessing: false, status: '' });
+    }
+  };
+
   // Show loading spinner while checking auth
   if (isAuthLoading) {
     return (
@@ -334,8 +373,29 @@ const App: React.FC = () => {
                  <NoteList notes={displayedNotes} onSelectNote={handleNoteSelect} language={language} />
               </div>
               
-              {/* Floating Action Button */}
-              <div className="absolute bottom-8 right-8 md:bottom-12 md:right-12">
+              {/* Hidden PDF file input */}
+              <input
+                type="file"
+                ref={pdfInputRef}
+                accept="application/pdf"
+                onChange={handlePdfUpload}
+                className="hidden"
+              />
+              
+              {/* Floating Action Buttons */}
+              <div className="absolute bottom-8 right-8 md:bottom-12 md:right-12 flex flex-col gap-3">
+                  {/* PDF Upload Button */}
+                  <button 
+                    onClick={() => pdfInputRef.current?.click()}
+                    className="group flex items-center justify-center w-14 h-14 bg-wonbiz-dark border border-wonbiz-gray rounded-full text-wonbiz-accent shadow-lg hover:scale-110 hover:border-wonbiz-accent transition-all duration-200"
+                  >
+                     <DocumentIcon className="w-6 h-6" />
+                     <span className="absolute right-full mr-4 bg-wonbiz-dark text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-wonbiz-gray">
+                       {language === 'zh' ? '上传PDF' : 'Upload PDF'}
+                     </span>
+                  </button>
+                  
+                  {/* Record Audio Button */}
                   <button 
                     onClick={() => setView(AppView.RECORDING)}
                     className="group flex items-center justify-center w-16 h-16 bg-wonbiz-accent rounded-full text-wonbiz-black shadow-lg hover:scale-110 transition-transform duration-200"

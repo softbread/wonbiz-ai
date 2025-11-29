@@ -340,6 +340,58 @@ export const checkBackendHealth = async (): Promise<{
   }
 };
 
+// Upload PDF and create a note
+export const uploadPdfAndCreateNote = async (
+  pdfFile: File,
+  llmConfig: LLMConfig,
+  language: AppLanguage = 'en',
+  onStatus?: (status: string) => void
+): Promise<Note> => {
+  onStatus?.(language === 'zh' ? '正在上传PDF...' : 'Uploading PDF...');
+
+  // Convert PDF file to base64
+  const arrayBuffer = await pdfFile.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  let binaryString = '';
+  for (let i = 0; i < uint8Array.length; i++) {
+    binaryString += String.fromCharCode(uint8Array[i]);
+  }
+  const base64Pdf = btoa(binaryString);
+
+  onStatus?.(language === 'zh' ? '正在提取文本...' : 'Extracting text from PDF...');
+
+  const response = await fetch(`${API_BASE_URL}/api/upload-pdf`, {
+    method: 'POST',
+    headers: getAuthHeadersWithContentType(),
+    body: JSON.stringify({
+      pdfData: base64Pdf,
+      llmConfig,
+      language,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('PDF upload failed:', response.status, errorText);
+    throw new Error(`PDF upload failed: ${errorText}`);
+  }
+
+  const data = await response.json();
+  onStatus?.(language === 'zh' ? '完成!' : 'Complete!');
+
+  return {
+    id: data.note.id,
+    title: data.note.title,
+    transcript: data.note.transcript,
+    summary: data.note.summary,
+    tags: data.note.tags,
+    duration: data.note.duration,
+    createdAt: data.note.createdAt,
+    llmProvider: data.note.llmProvider,
+    audioBlob: null, // PDFs don't have audio
+  };
+};
+
 export const chatAboutTranscript = async (history: { role: string; content: string }[], newMessage: string, transcript: string, llmConfig: LLMConfig) => {
   if (!LLAMA_CLOUD_API_KEY) throw new Error('Missing LlamaIndex (LlamaCloud) API key');
 

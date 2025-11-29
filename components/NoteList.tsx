@@ -1,6 +1,6 @@
 import React from 'react';
 import { Note, AppLanguage, i18n } from '../types';
-import { PlayIcon, BrainIcon } from './Icons';
+import { PlayIcon, BrainIcon, DocumentIcon } from './Icons';
 import { formatDuration } from '../services/audioUtils';
 
 interface NoteListProps {
@@ -31,8 +31,12 @@ const NoteList: React.FC<NoteListProps> = ({ notes, onSelectNote, language = 'en
           className="group bg-wonbiz-dark border border-wonbiz-gray rounded-xl p-6 cursor-pointer hover:border-wonbiz-accent transition-all hover:shadow-2xl hover:shadow-wonbiz-gray/10 flex flex-col"
         >
           <div className="flex justify-between items-start mb-4">
-            <div className="bg-wonbiz-gray/50 rounded-full p-2">
-               <PlayIcon className="w-4 h-4 text-wonbiz-text" />
+            <div className={`rounded-full p-2 ${note.sourceType === 'pdf' ? 'bg-red-500/20' : 'bg-wonbiz-gray/50'}`}>
+               {note.sourceType === 'pdf' ? (
+                 <DocumentIcon className="w-4 h-4 text-red-400" />
+               ) : (
+                 <PlayIcon className="w-4 h-4 text-wonbiz-text" />
+               )}
             </div>
             <span className="text-xs font-mono text-wonbiz-gray">
               {new Date(note.createdAt).toLocaleDateString()}
