@@ -1,0 +1,64 @@
+{
+  "family": "wonbiz-ai",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::<account-id>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<account-id>:role/wonbiz-ai-task-role",
+  "containerDefinitions": [
+    {
+      "name": "frontend",
+      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/wonbiz-ai-frontend:latest",
+      "essential": true,
+      "portMappings": [
+        { "containerPort": 80, "protocol": "tcp" }
+      ],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "VITE_API_BASE_URL", "value": "https://api.your-domain.com" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/wonbiz-ai",
+          "awslogs-region": "<region>",
+          "awslogs-stream-prefix": "frontend"
+        }
+      }
+    },
+    {
+      "name": "api",
+      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/wonbiz-ai-server:latest",
+      "essential": true,
+      "portMappings": [
+        { "containerPort": 3001, "protocol": "tcp" }
+      ],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" }
+      ],
+      "secrets": [
+        { "name": "MONGODB_URI", "valueFrom": "arn:aws:ssm:<region>:<account-id>:parameter/Wonbiz/MONGODB_URI" },
+        { "name": "MONGODB_DB", "valueFrom": "arn:aws:ssm:<region>:<account-id>:parameter/Wonbiz/MONGODB_DB" },
+        { "name": "MONGODB_COLLECTION", "valueFrom": "arn:aws:ssm:<region>:<account-id>:parameter/Wonbiz/MONGODB_COLLECTION" },
+        { "name": "MONGODB_VECTOR_INDEX", "valueFrom": "arn:aws:ssm:<region>:<account-id>:parameter/Wonbiz/MONGODB_VECTOR_INDEX" },
+        { "name": "MONGODB_VECTOR_PATH", "valueFrom": "arn:aws:ssm:<region>:<account-id>:parameter/Wonbiz/MONGODB_VECTOR_PATH" },
+        { "name": "VOYAGE_API_KEY", "valueFrom": "arn:aws:ssm:<region>:<account-id>:parameter/Wonbiz/VOYAGE_API_KEY" },
+        { "name": "ASSEMBLYAI_API_KEY", "valueFrom": "arn:aws:ssm:<region>:<account-id>:parameter/Wonbiz/ASSEMBLYAI_API_KEY" },
+        { "name": "LLAMA_CLOUD_API_KEY", "valueFrom": "arn:aws:ssm:<region>:<account-id>:parameter/Wonbiz/LLAMA_CLOUD_API_KEY" },
+        { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:ssm:<region>:<account-id>:parameter/Wonbiz/OPENAI_API_KEY" },
+        { "name": "GROK_API_KEY", "valueFrom": "arn:aws:ssm:<region>:<account-id>:parameter/Wonbiz/GROK_API_KEY" },
+        { "name": "GEMINI_API_KEY", "valueFrom": "arn:aws:ssm:<region>:<account-id>:parameter/Wonbiz/GEMINI_API_KEY" },
+        { "name": "JWT_SECRET", "valueFrom": "arn:aws:ssm:<region>:<account-id>:parameter/Wonbiz/JWT_SECRET" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/wonbiz-ai",
+          "awslogs-region": "<region>",
+          "awslogs-stream-prefix": "api"
+        }
+      }
+    }
+  ]
+}

@@ -159,6 +159,10 @@ Access:
 - Backend API: `http://localhost:3001`
 - Production frontend: `http://localhost:80`
 
+### AWS ECS (Fargate)
+
+Use the provided GitHub Actions workflow and task definition under `aws/` to deploy both containers to Amazon ECS with Fargate. The workflow builds and pushes Docker images to ECR, updates the task definition with the new image tags, and redeploys the ECS service. See [`aws/README.md`](aws/README.md) for required AWS resources, secrets, and customization steps.
+
 ## ⚙️ Configuration
 
 ### LLM Providers
