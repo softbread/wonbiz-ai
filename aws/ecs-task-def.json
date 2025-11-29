@@ -16,7 +16,7 @@
       ],
       "environment": [
         { "name": "NODE_ENV", "value": "production" },
-        { "name": "VITE_API_BASE_URL", "value": "https://api.your-domain.com" }
+        { "name": "VITE_API_BASE_URL", "value": "https://s1.wonbiz.com" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",

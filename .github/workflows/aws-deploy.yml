@@ -47,7 +47,7 @@ jobs:
           VITE_ASSEMBLYAI_API_KEY: ${{ secrets.VITE_ASSEMBLYAI_API_KEY }}
           VITE_LLAMA_CLOUD_API_KEY: ${{ secrets.VITE_LLAMA_CLOUD_API_KEY }}
           VITE_EMBEDDING_MODEL: ${{ secrets.VITE_EMBEDDING_MODEL }}
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://s1.wonbiz.com' }}
         run: |
           FRONTEND_IMAGE="$REGISTRY/${{ env.ECR_REPOSITORY_FRONTEND }}:$IMAGE_TAG"
           docker build \
