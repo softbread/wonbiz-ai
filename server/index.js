@@ -260,7 +260,7 @@ For the given transcript, provide:
 Return your response as a JSON object with keys: "transcript", "summary", "title", "tags" (array of strings).`;
 
   let apiUrl, headers, body;
-  let content;
+  let content = null;
   
   //  Map certain experimental or placeholder "future" model identifiers (that clients may send)
   let modelToUse = llmConfig.model;
