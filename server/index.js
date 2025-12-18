@@ -4,6 +4,7 @@ import { MongoClient } from 'mongodb';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { OpenRouter } from '@openrouter/sdk';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
@@ -38,6 +39,15 @@ const LLAMA_CLOUD_API_KEY = process.env.LLAMA_CLOUD_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const GROK_API_KEY = process.env.GROK_API_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+
+const openRouter = new OpenRouter({
+  apiKey: OPENROUTER_API_KEY,
+  defaultHeaders: {
+    'HTTP-Referer': 'https://wonbiz.ai',
+    'X-Title': 'WonBiz AI',
+  },
+});
 
 let db;
 let notesCollection;
@@ -250,82 +260,93 @@ For the given transcript, provide:
 Return your response as a JSON object with keys: "transcript", "summary", "title", "tags" (array of strings).`;
 
   let apiUrl, headers, body;
-
-  switch (llmConfig.provider) {
-    case 'openai':
-      if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
-      apiUrl = 'https://api.openai.com/v1/chat/completions';
-      headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      };
-      body = {
-        model: llmConfig.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Please process this voice transcript:\n\n${transcript}` },
-        ],
-        temperature: 0.3,
-      };
-      break;
-
-    case 'grok':
-      if (!GROK_API_KEY) throw new Error('Grok API key not configured');
-      apiUrl = 'https://api.x.ai/v1/chat/completions';
-      headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${GROK_API_KEY}`,
-      };
-      body = {
-        model: llmConfig.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Please process this voice transcript:\n\n${transcript}` },
-        ],
-        temperature: 0.3,
-      };
-      break;
-
-    case 'gemini':
-      if (!GEMINI_API_KEY) throw new Error('Gemini API key not configured');
-      apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${llmConfig.model}:generateContent?key=${GEMINI_API_KEY}`;
-      headers = {
-        'Content-Type': 'application/json',
-      };
-      body = {
-        contents: [{
-          parts: [{
-            text: `${systemPrompt}\n\nPlease process this voice transcript:\n\n${transcript}`,
-          }],
-        }],
-        generationConfig: {
-          temperature: 0.3,
-        },
-      };
-      break;
-
-    default:
-      throw new Error(`Unsupported LLM provider: ${llmConfig.provider}`);
-  }
-
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`${llmConfig.provider} API error: ${errorText}`);
-  }
-
-  const data = await response.json();
   let content;
-
+  
+  // Map requested "future" models to currently available ones if needed
+  let modelToUse = llmConfig.model;
   if (llmConfig.provider === 'gemini') {
-    content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (modelToUse === 'gemini-3-flash') modelToUse = 'gemini-3-flash-preview';
+    if (modelToUse === 'gemini-2.5-flash') modelToUse = 'gemini-1.5-flash';
+  } else if (llmConfig.provider === 'openai') {
+    if (modelToUse === 'gpt-5.2') modelToUse = 'gpt-4o-mini-transcribe';
+    if (modelToUse === 'gpt-5-mini') modelToUse = 'gpt-5-mini-2025-08-07';
+  } else if (llmConfig.provider === 'grok') {
+    if (modelToUse === 'grok-4.1-flash') modelToUse = 'x-ai/grok-4.1-fast';
+  }
+
+  if (llmConfig.provider === 'grok') {
+    if (!OPENROUTER_API_KEY) throw new Error('OpenRouter API key not configured');
+    console.log('Using OpenRouter for Grok:', modelToUse);
+    const completion = await openRouter.chat.send({
+      model: modelToUse,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Please process this voice transcript:\n\n${transcript}` },
+      ],
+      temperature: 0.3,
+    });
+    content = completion.choices?.[0]?.message?.content;
   } else {
-    content = data.choices?.[0]?.message?.content;
+    switch (llmConfig.provider) {
+      case 'openai':
+        if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
+        apiUrl = 'https://api.openai.com/v1/chat/completions';
+        headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        };
+        body = {
+          model: modelToUse,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Please process this voice transcript:\n\n${transcript}` },
+          ],
+        };
+        // Only add temperature if it's not gpt-5-mini which requires default (1)
+        if (modelToUse !== 'gpt-5-mini-2025-08-07') {
+          body.temperature = 0.3;
+        }
+        break;
+
+      case 'gemini':
+        if (!GEMINI_API_KEY) throw new Error('Gemini API key not configured');
+        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${GEMINI_API_KEY}`;
+        headers = {
+          'Content-Type': 'application/json',
+        };
+        body = {
+          contents: [{
+            parts: [{
+              text: `${systemPrompt}\n\nPlease process this voice transcript:\n\n${transcript}`,
+            }],
+          }],
+          generationConfig: {
+            temperature: 0.3,
+          },
+        };
+        break;
+
+      default:
+        throw new Error(`Unsupported LLM provider: ${llmConfig.provider}`);
+    }
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`${llmConfig.provider} API error: ${errorText}`);
+    }
+
+    const data = await response.json();
+    if (llmConfig.provider === 'gemini') {
+      content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    } else {
+      content = data.choices?.[0]?.message?.content;
+    }
   }
 
   if (!content) {
@@ -783,8 +804,8 @@ app.post('/api/notes', authenticateToken, async (req, res) => {
       duration: note.duration,
       llmProvider: note.llmProvider,
       [MONGODB_VECTOR_PATH]: embedding,
-      // Store audio data if provided
-      audioData: note.audioData || null, // base64 encoded audio
+      // Audio data is NOT stored in MongoDB due to 16MB document limit
+      // For large audio files, consider using GridFS or external storage
       audioMimeType: note.audioMimeType || null, // e.g., 'audio/webm'
     };
 
@@ -942,7 +963,7 @@ app.get('/api/notes/:id', authenticateToken, async (req, res) => {
         tags: note.tags || [],
         createdAt: note.createdAt,
         duration: note.duration || 0,
-        audioData: note.audioData || null,
+        audioData: null, // Disabled to avoid 16MB limit
         audioMimeType: note.audioMimeType || null,
         llmProvider: note.llmProvider,
         sourceType: note.sourceType || 'audio',
@@ -989,90 +1010,93 @@ app.post('/api/notes/:id/regenerate', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'LLM config is required' });
     }
 
-    // Get the note with audio data
+    // Get the note
     const note = await notesCollection.findOne({ _id: id, userId: req.user.userId });
     if (!note) {
       return res.status(404).json({ error: 'Note not found' });
     }
 
-    if (!note.audioData) {
-      return res.status(400).json({ error: 'No audio data available for this note' });
-    }
+    console.log('Regenerating note:', id, 'Source type:', note.sourceType);
 
-    console.log('Regenerating note:', id);
-
-    // Step 1: Re-transcribe the audio
-    const audioBuffer = Buffer.from(note.audioData, 'base64');
-
-    // Upload to AssemblyAI
-    const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
-      method: 'POST',
-      headers: {
-        'Authorization': ASSEMBLY_API_KEY,
-        'Content-Type': 'application/octet-stream',
-      },
-      body: audioBuffer,
-    });
-
-    if (!uploadResponse.ok) {
-      throw new Error('Audio upload failed');
-    }
-
-    const uploadData = await uploadResponse.json();
-    const audioUrl = uploadData.upload_url;
-
-    // Request transcription with language detection
-    const transcribeResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
-      method: 'POST',
-      headers: {
-        'Authorization': ASSEMBLY_API_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        audio_url: audioUrl,
-        punctuate: true,
-        format_text: true,
-        language_detection: true,
-      }),
-    });
-
-    if (!transcribeResponse.ok) {
-      throw new Error('Transcription request failed');
-    }
-
-    const transcribeData = await transcribeResponse.json();
-    const transcriptId = transcribeData.id;
-
-    // Poll for completion
-    let transcript = '';
+    let transcript = note.transcript;
     let detectedLanguage = 'en';
-    let attempts = 0;
-    const maxAttempts = 60;
 
-    while (attempts < maxAttempts) {
-      const statusResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
-        headers: { 'Authorization': ASSEMBLY_API_KEY },
+    // Step 1: Re-transcribe ONLY if audio data is available
+    if (note.audioData) {
+      console.log('Audio data found, re-transcribing with AssemblyAI...');
+      const audioBuffer = Buffer.from(note.audioData, 'base64');
+
+      // Upload to AssemblyAI
+      const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': ASSEMBLY_API_KEY,
+          'Content-Type': 'application/octet-stream',
+        },
+        body: audioBuffer,
       });
 
-      const statusData = await statusResponse.json();
-
-      if (statusData.status === 'completed') {
-        transcript = statusData.text || '';
-        detectedLanguage = statusData.language_code || 'en';
-        break;
-      } else if (statusData.status === 'error') {
-        throw new Error(`Transcription failed: ${statusData.error}`);
+      if (!uploadResponse.ok) {
+        throw new Error('Audio upload failed');
       }
 
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      attempts++;
-    }
+      const uploadData = await uploadResponse.json();
+      const audioUrl = uploadData.upload_url;
 
-    if (!transcript) {
-      throw new Error('Transcription timed out');
-    }
+      // Request transcription with language detection
+      const transcribeResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
+        method: 'POST',
+        headers: {
+          'Authorization': ASSEMBLY_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          audio_url: audioUrl,
+          punctuate: true,
+          format_text: true,
+          language_detection: true,
+        }),
+      });
 
-    console.log('Transcription completed, detected language:', detectedLanguage);
+      if (!transcribeResponse.ok) {
+        throw new Error('Transcription request failed');
+      }
+
+      const transcribeData = await transcribeResponse.json();
+      const transcriptId = transcribeData.id;
+
+      // Poll for completion
+      let attempts = 0;
+      const maxAttempts = 60;
+
+      while (attempts < maxAttempts) {
+        const statusResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+          headers: { 'Authorization': ASSEMBLY_API_KEY },
+        });
+
+        const statusData = await statusResponse.json();
+
+        if (statusData.status === 'completed') {
+          transcript = statusData.text || '';
+          detectedLanguage = statusData.language_code || 'en';
+          break;
+        } else if (statusData.status === 'error') {
+          throw new Error(`Transcription failed: ${statusData.error}`);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        attempts++;
+      }
+
+      if (!transcript) {
+        throw new Error('Transcription timed out');
+      }
+      console.log('Transcription completed, detected language:', detectedLanguage);
+    } else {
+      console.log('No audio data found, using existing transcript for re-summarization');
+      // Try to guess language from existing transcript or default to 'en'
+      detectedLanguage = (note.summary && /[\u4e00-\u9fa5]/.test(note.summary)) ? 'zh' : 'en';
+    }
 
     // Step 2: Run orchestration to get summary, title, tags
     const orchestrationLanguage = detectedLanguage.startsWith('zh') ? 'zh' : 'en';
@@ -1134,100 +1158,111 @@ app.post('/api/chat', async (req, res) => {
     const systemPrompt = `You are a helpful AI assistant with access to the user's notes. Answer questions based on the provided context from the notes. If the answer is not in the context, say so. Be concise and helpful.`;
 
     let apiUrl, headers, body;
-
-    switch (llmConfig.provider) {
-      case 'openai':
-        if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
-        apiUrl = 'https://api.openai.com/v1/chat/completions';
-        headers = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        };
-        body = {
-          model: llmConfig.model || 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...(context ? [{ role: 'user', content: `Context from relevant notes:\n${context}` }] : []),
-            ...(history || []).map(h => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content })),
-            { role: 'user', content: message },
-          ],
-          temperature: 0.3,
-        };
-        break;
-
-      case 'grok':
-        if (!GROK_API_KEY) throw new Error('Grok API key not configured');
-        apiUrl = 'https://api.x.ai/v1/chat/completions';
-        headers = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${GROK_API_KEY}`,
-        };
-        body = {
-          model: llmConfig.model || 'grok-beta',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...(context ? [{ role: 'user', content: `Context from relevant notes:\n${context}` }] : []),
-            ...(history || []).map(h => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content })),
-            { role: 'user', content: message },
-          ],
-          temperature: 0.3,
-        };
-        break;
-
-      case 'gemini':
-        if (!GEMINI_API_KEY) throw new Error('Gemini API key not configured');
-        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${llmConfig.model || 'gemini-2.5-flash'}:generateContent?key=${GEMINI_API_KEY}`;
-        headers = {
-          'Content-Type': 'application/json',
-        };
-        
-        // Build conversation parts for Gemini
-        const parts = [];
-        parts.push({ text: systemPrompt });
-        if (context) {
-          parts.push({ text: `\n\nContext from relevant notes:\n${context}` });
-        }
-        if (history && history.length > 0) {
-          for (const h of history) {
-            parts.push({ text: `\n\n${h.role === 'assistant' ? 'Assistant' : 'User'}: ${h.content}` });
-          }
-        }
-        parts.push({ text: `\n\nUser: ${message}` });
-        
-        body = {
-          contents: [{
-            parts: parts,
-          }],
-          generationConfig: {
-            temperature: 0.3,
-          },
-        };
-        break;
-
-      default:
-        throw new Error(`Unsupported LLM provider: ${llmConfig.provider}`);
-    }
-
-    console.log('Making API call to:', apiUrl);
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('LLM API error:', response.status, errorText);
-      throw new Error(`LLM API error: ${errorText}`);
-    }
-
-    const data = await response.json();
     let responseText;
 
+    // Map requested "future" models to currently available ones if needed
+    let modelToUse = llmConfig.model;
     if (llmConfig.provider === 'gemini') {
-      responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (modelToUse === 'gemini-3-flash') modelToUse = 'gemini-3-flash-preview';
+      if (modelToUse === 'gemini-2.5-flash') modelToUse = 'gemini-1.5-flash';
+    } else if (llmConfig.provider === 'openai') {
+      if (modelToUse === 'gpt-5.2') modelToUse = 'gpt-4o-mini-transcribe';
+      if (modelToUse === 'gpt-5-mini') modelToUse = 'gpt-5-mini-2025-08-07';
+    } else if (llmConfig.provider === 'grok') {
+      if (modelToUse === 'grok-4.1-flash') modelToUse = 'x-ai/grok-4.1-fast';
+    }
+
+    if (llmConfig.provider === 'grok') {
+      if (!OPENROUTER_API_KEY) throw new Error('OpenRouter API key not configured');
+      console.log('Using OpenRouter for Grok Chat:', modelToUse);
+      const completion = await openRouter.chat.send({
+        model: modelToUse || 'x-ai/grok-4.1-fast',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...(context ? [{ role: 'user', content: `Context from relevant notes:\n${context}` }] : []),
+          ...(history || []).map(h => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content })),
+          { role: 'user', content: message },
+        ],
+        temperature: 0.3,
+      });
+      responseText = completion.choices?.[0]?.message?.content;
     } else {
-      responseText = data.choices?.[0]?.message?.content;
+      switch (llmConfig.provider) {
+        case 'openai':
+          if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
+          apiUrl = 'https://api.openai.com/v1/chat/completions';
+          headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          };
+          body = {
+            model: modelToUse || 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              ...(context ? [{ role: 'user', content: `Context from relevant notes:\n${context}` }] : []),
+              ...(history || []).map(h => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content })),
+              { role: 'user', content: message },
+            ],
+          };
+          // Only add temperature if it's not gpt-5-mini which requires default (1)
+          if (modelToUse !== 'gpt-5-mini-2025-08-07') {
+            body.temperature = 0.3;
+          }
+          break;
+
+        case 'gemini':
+          if (!GEMINI_API_KEY) throw new Error('Gemini API key not configured');
+          apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse || 'gemini-1.5-flash'}:generateContent?key=${GEMINI_API_KEY}`;
+          headers = {
+            'Content-Type': 'application/json',
+          };
+          
+          // Build conversation parts for Gemini
+          const parts = [];
+          parts.push({ text: systemPrompt });
+          if (context) {
+            parts.push({ text: `\n\nContext from relevant notes:\n${context}` });
+          }
+          if (history && history.length > 0) {
+            for (const h of history) {
+              parts.push({ text: `\n\n${h.role === 'assistant' ? 'Assistant' : 'User'}: ${h.content}` });
+            }
+          }
+          parts.push({ text: `\n\nUser: ${message}` });
+          
+          body = {
+            contents: [{
+              parts: parts,
+            }],
+            generationConfig: {
+              temperature: 0.3,
+            },
+          };
+          break;
+
+        default:
+          throw new Error(`Unsupported LLM provider: ${llmConfig.provider}`);
+      }
+
+      console.log('Making API call to:', apiUrl);
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('LLM API error:', response.status, errorText);
+        throw new Error(`LLM API error: ${errorText}`);
+      }
+
+      const data = await response.json();
+      if (llmConfig.provider === 'gemini') {
+        responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      } else {
+        responseText = data.choices?.[0]?.message?.content;
+      }
     }
 
     console.log('RAG Chat response received, length:', responseText?.length || 0);
