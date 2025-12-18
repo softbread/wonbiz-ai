@@ -1,0 +1,102 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+  ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
+  ECR_REPOSITORY_FRONTEND: ${{ secrets.ECR_REPOSITORY_FRONTEND }}
+  ECR_REPOSITORY_SERVER: ${{ secrets.ECR_REPOSITORY_SERVER }}
+
+jobs:
+  deploy:
+    name: Build and Deploy to ECS
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: wonbiz-ai-deploy
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push frontend image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
+          VITE_GROK_API_KEY: ${{ secrets.VITE_GROK_API_KEY }}
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+          VITE_ASSEMBLYAI_API_KEY: ${{ secrets.VITE_ASSEMBLYAI_API_KEY }}
+          VITE_LLAMA_CLOUD_API_KEY: ${{ secrets.VITE_LLAMA_CLOUD_API_KEY }}
+          VITE_EMBEDDING_MODEL: ${{ secrets.VITE_EMBEDDING_MODEL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://s1.wonbiz.com' }}
+        run: |
+          FRONTEND_IMAGE="$REGISTRY/${{ env.ECR_REPOSITORY_FRONTEND }}:$IMAGE_TAG"
+          docker build \
+            --file Dockerfile \
+            --target production \
+            --build-arg VITE_OPENAI_API_KEY \
+            --build-arg VITE_GROK_API_KEY \
+            --build-arg VITE_GEMINI_API_KEY \
+            --build-arg VITE_ASSEMBLYAI_API_KEY \
+            --build-arg VITE_LLAMA_CLOUD_API_KEY \
+            --build-arg VITE_EMBEDDING_MODEL \
+            --build-arg VITE_API_BASE_URL \
+            -t "$FRONTEND_IMAGE" .
+          docker push "$FRONTEND_IMAGE"
+          echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" >> $GITHUB_ENV
+
+      - name: Build and push API image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          API_IMAGE="$REGISTRY/${{ env.ECR_REPOSITORY_SERVER }}:$IMAGE_TAG"
+          docker build \
+            --file server/Dockerfile \
+            --tag "$API_IMAGE" \
+            server
+          docker push "$API_IMAGE"
+          echo "API_IMAGE=$API_IMAGE" >> $GITHUB_ENV
+
+      - name: Render task definition for frontend image
+        id: render-frontend
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: aws/ecs-task-def.json
+          container-name: frontend
+          image: ${{ env.FRONTEND_IMAGE }}
+
+      - name: Render task definition for API image
+        id: render-api
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-frontend.outputs.task-definition }}
+          container-name: api
+          image: ${{ env.API_IMAGE }}
+
+      - name: Deploy to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-api.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
