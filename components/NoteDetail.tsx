@@ -142,10 +142,10 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDele
       } else {
         throw new Error('No response from regenerate');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to regenerate note:', error);
-      const errorMsg = error.message || (language === 'zh' ? '重新生成失败，请重试' : 'Failed to regenerate. Please try again.');
-      setToast({ message: errorMsg, type: 'error' });
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setToast({ message: errorMsg || (language === 'zh' ? '重新生成失败，请重试' : 'Failed to regenerate. Please try again.'), type: 'error' });
     } finally {
       setIsRegenerating(false);
     }

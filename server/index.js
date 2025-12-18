@@ -262,13 +262,22 @@ Return your response as a JSON object with keys: "transcript", "summary", "title
   let apiUrl, headers, body;
   let content;
   
-  // Map requested "future" models to currently available ones if needed
+  //  Map certain experimental or placeholder "future" model identifiers (that clients may send)
   let modelToUse = llmConfig.model;
   if (llmConfig.provider === 'gemini') {
     if (modelToUse === 'gemini-3-flash') modelToUse = 'gemini-3-flash-preview';
-    if (modelToUse === 'gemini-2.5-flash') modelToUse = 'gemini-1.5-flash';
+    if (modelToUse === 'gemini-2.5-flash') {
+      console.warn(
+        'Passing it through as-is; the upstream API may return an error.'
+      );
+    }
+
   } else if (llmConfig.provider === 'openai') {
-    if (modelToUse === 'gpt-5.2') modelToUse = 'gpt-4o-mini-transcribe';
+    if (modelToUse === 'gpt-5.2') {
+      console.warn(
+        'Passing it through as-is; the upstream API may return an error.'
+      );
+    }
     if (modelToUse === 'gpt-5-mini') modelToUse = 'gpt-5-mini-2025-08-07';
   } else if (llmConfig.provider === 'grok') {
     if (modelToUse === 'grok-4.1-flash') modelToUse = 'x-ai/grok-4.1-fast';

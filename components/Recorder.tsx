@@ -55,6 +55,8 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel, lang
 
   const startRecording = async () => {
     try {
+      setShowWarning(false); 
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorderRef.current = new MediaRecorder(stream);
       chunksRef.current = [];
@@ -92,7 +94,7 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel, lang
         
         // Show warning when approaching limit
         if (elapsed >= WARNING_THRESHOLD && !showWarning) {
-          setShowWarning(true);
+          setShowWarning(true); 
         }
         
         // Auto-stop when reaching maximum duration
