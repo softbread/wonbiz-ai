@@ -125,11 +125,6 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDele
   };
 
   const handleRegenerate = async () => {
-    if (!hasAudio) {
-      setToast({ message: language === 'zh' ? '无法重新生成：没有音频数据' : 'Cannot regenerate: No audio data available', type: 'error' });
-      return;
-    }
-    
     setShowRegenerateConfirm(true);
   };
 
@@ -147,9 +142,10 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDele
       } else {
         throw new Error('No response from regenerate');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to regenerate note:', error);
-      setToast({ message: language === 'zh' ? '重新生成失败，请重试' : 'Failed to regenerate. Please try again.', type: 'error' });
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setToast({ message: errorMsg || (language === 'zh' ? '重新生成失败，请重试' : 'Failed to regenerate. Please try again.'), type: 'error' });
     } finally {
       setIsRegenerating(false);
     }
@@ -280,21 +276,18 @@ const NoteDetail: React.FC<NoteDetailProps> = ({ note, llmConfig, onBack, onDele
                <span key={tag} className="hidden sm:inline-block px-2 py-1 bg-wonbiz-gray/20 rounded text-xs text-wonbiz-text/60 border border-wonbiz-gray/20">#{tag}</span>
            ))}
         </div>
-        {/* Only show regenerate button for audio notes */}
-        {currentNote.sourceType !== 'pdf' && (
-          <button 
-            onClick={handleRegenerate} 
-            disabled={isRegenerating || !hasAudio}
-            className={`p-2 rounded-full transition-colors mr-1 ${
-              isRegenerating || !hasAudio 
-                ? 'text-wonbiz-gray cursor-not-allowed' 
-                : 'hover:bg-wonbiz-accent/20 text-wonbiz-accent hover:text-wonbiz-accent'
-            }`}
-            title={language === 'zh' ? '重新生成摘要和转录' : 'Regenerate summary & transcript'}
-          >
-            <RefreshIcon className={`w-5 h-5 ${isRegenerating ? 'animate-spin' : ''}`} />
-          </button>
-        )}
+        <button 
+          onClick={handleRegenerate} 
+          disabled={isRegenerating}
+          className={`p-2 rounded-full transition-colors mr-1 ${
+            isRegenerating 
+              ? 'text-wonbiz-gray cursor-not-allowed' 
+              : 'hover:bg-wonbiz-accent/20 text-wonbiz-accent hover:text-wonbiz-accent'
+          }`}
+          title={language === 'zh' ? '重新生成摘要和转录' : 'Regenerate summary & transcript'}
+        >
+          <RefreshIcon className={`w-5 h-5 ${isRegenerating ? 'animate-spin' : ''}`} />
+        </button>
         <button onClick={handleDelete} className="p-2 hover:bg-red-500/20 rounded-full transition-colors text-red-400 hover:text-red-300">
           <TrashIcon className="w-5 h-5" />
         </button>

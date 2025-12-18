@@ -510,16 +510,16 @@ export const prepareAssistantNote = async (
 
 export const llmOptions: Record<string, { label: string; models: string[] }> = {
   openai: {
-    label: 'OpenAI OSS',
-    models: ['openai-oss', 'openai-oss-mini'],
+    label: 'OpenAI',
+    models: ['gpt-5.2', 'gpt-5-mini'],
   },
   grok: {
-    label: 'Grok 4.1',
-    models: ['grok-4.1-fast', 'grok-4.1', 'grok-4.1-mini'],
+    label: 'Grok',
+    models: ['grok-4.1-flash'],
   },
   gemini: {
-    label: 'Gemini 2.5',
-    models: ['gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    label: 'Gemini',
+    models: ['gemini-3-flash', 'gemini-2.5-flash'],
   },
 };
 

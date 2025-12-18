@@ -13,6 +13,11 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel, lang
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [audioLevel, setAudioLevel] = useState<number[]>(new Array(10).fill(10));
+  const [showWarning, setShowWarning] = useState(false);
+  
+  // Maximum recording duration in seconds (15 minutes to stay well under 16MB limit)
+  const MAX_RECORDING_DURATION = 15 * 60; // 15 minutes
+  const WARNING_THRESHOLD = 14 * 60; // Show warning at 14 minutes
   
   // Get translated text
   const t = (key: string) => i18n[language][key] || key;
@@ -50,6 +55,8 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel, lang
 
   const startRecording = async () => {
     try {
+      setShowWarning(false); 
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorderRef.current = new MediaRecorder(stream);
       chunksRef.current = [];
@@ -84,6 +91,17 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel, lang
         const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
         durationRef.current = elapsed;
         setDuration(elapsed);
+        
+        // Show warning when approaching limit
+        if (elapsed >= WARNING_THRESHOLD && !showWarning) {
+          setShowWarning(true); 
+        }
+        
+        // Auto-stop when reaching maximum duration
+        if (elapsed >= MAX_RECORDING_DURATION) {
+          console.log('Auto-stopping recording due to maximum duration limit');
+          stopRecording();
+        }
       }, 1000);
 
       visualize();
@@ -126,8 +144,16 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete, onCancel, lang
         <p className="text-wonbiz-gray text-sm font-mono tracking-widest uppercase">AssemblyAI + LlamaIndex</p>
       </div>
 
+      {/* Warning message when approaching limit */}
+      {showWarning && (
+        <div className="bg-yellow-500/20 border border-yellow-500 text-yellow-300 px-4 py-2 rounded-lg text-sm">
+          ⚠️ {language === 'zh' ? '即将达到15分钟限制，录音将自动停止' : 'Approaching 15 min limit. Recording will auto-stop.'}
+        </div>
+      )}
+
       <div className="text-6xl font-thin font-mono tabular-nums text-white">
         {formatDuration(duration)}
+        <span className="text-lg text-wonbiz-gray ml-2">/ {formatDuration(MAX_RECORDING_DURATION)}</span>
       </div>
 
       {/* Visualizer */}
